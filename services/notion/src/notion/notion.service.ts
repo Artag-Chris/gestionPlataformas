@@ -162,7 +162,8 @@ export class NotionService {
     const priority = meta['priority'] as string | undefined;
 
     // Build properties dynamically — only include optional ones if provided
-    const properties: Record<string, unknown> = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const properties: Record<string, any> = {
       [titleProperty]: {
         title: [{ type: 'text', text: { content: dto.message } }],
       },
