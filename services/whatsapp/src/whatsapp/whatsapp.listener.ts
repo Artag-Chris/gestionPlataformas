@@ -29,7 +29,7 @@ export class WhatsappListener implements OnModuleInit {
     const dto = payload as unknown as SendWhatsappDto;
 
     this.logger.log(
-      `Processing message ${dto.messageId} → ${dto.recipients.length} recipient(s)`,
+      `Processing message ${dto.messageId} → recipients: [${dto.recipients.join(', ')}]`,
     );
 
     const response = await this.whatsapp.sendToRecipients(dto);
@@ -43,6 +43,14 @@ export class WhatsappListener implements OnModuleInit {
       errors: response.errors ?? null,
       timestamp: response.timestamp,
     });
+
+    if (response.errors && response.errors.length > 0) {
+      for (const err of response.errors) {
+        this.logger.error(
+          `Message ${dto.messageId} | recipient ${err.recipient} FAILED → ${err.reason}`,
+        );
+      }
+    }
 
     this.logger.log(
       `Message ${dto.messageId} done → status: ${response.status} | sent: ${response.sentCount} | failed: ${response.failedCount}`,

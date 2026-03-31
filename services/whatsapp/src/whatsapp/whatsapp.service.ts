@@ -13,7 +13,10 @@ interface MetaApiResponse {
 interface MetaApiError {
   error: {
     message: string;
+    type?: string;
     code: number;
+    error_subcode?: number;
+    fbtrace_id?: string;
   };
 }
 
@@ -91,6 +94,11 @@ export class WhatsappService {
 
     try {
       const payload = this.buildMetaPayload(recipient, message, mediaUrl);
+
+      this.logger.debug(
+        `[sendToOne] Calling Meta API → URL: ${this.apiUrl} | recipient: ${recipient} | payload: ${JSON.stringify(payload)}`,
+      );
+
       const response = await axios.post<MetaApiResponse>(this.apiUrl, payload, {
         headers: {
           Authorization: `Bearer ${this.apiToken}`,
@@ -107,14 +115,18 @@ export class WhatsappService {
 
       this.logger.log(`Sent to ${recipient} | waMessageId: ${waMessageId}`);
     } catch (error) {
-      const reason = this.extractErrorMessage(error);
+      const { reason, detail } = this.extractErrorDetail(error);
 
       await this.prisma.waMessage.update({
         where: { id: record.id },
         data: { status: 'FAILED', errorReason: reason },
       });
 
-      this.logger.error(`Failed to send to ${recipient}: ${reason}`);
+      this.logger.error(
+        `Failed to send to ${recipient}\n` +
+          `  reason   : ${reason}\n` +
+          `  ${detail}`,
+      );
       throw new Error(reason);
     }
   }
@@ -154,11 +166,26 @@ export class WhatsappService {
     return 'PARTIAL';
   }
 
-  private extractErrorMessage(error: unknown): string {
+  private extractErrorDetail(error: unknown): { reason: string; detail: string } {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError<MetaApiError>;
-      return axiosError.response?.data?.error?.message ?? axiosError.message;
+      const httpStatus = axiosError.response?.status ?? 'no-response';
+      const metaError = axiosError.response?.data?.error;
+
+      const reason = metaError?.message ?? axiosError.message;
+      const detail =
+        `httpStatus: ${httpStatus}\n` +
+        `  metaCode : ${metaError?.code ?? 'n/a'}\n` +
+        `  metaType : ${metaError?.type ?? 'n/a'}\n` +
+        `  subcode  : ${metaError?.error_subcode ?? 'n/a'}\n` +
+        `  traceId  : ${metaError?.fbtrace_id ?? 'n/a'}\n` +
+        `  apiUrl   : ${this.apiUrl}\n` +
+        `  rawBody  : ${JSON.stringify(axiosError.response?.data ?? null)}`;
+
+      return { reason, detail };
     }
-    return error instanceof Error ? error.message : String(error);
+
+    const reason = error instanceof Error ? error.message : String(error);
+    return { reason, detail: `(non-axios error) ${reason}` };
   }
 }
