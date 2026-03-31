@@ -1,0 +1,268 @@
+{
+  "_type": "export",
+  "__exportVersion": 4,
+  "__exportDate": "2025-03-30T10:00:00.000Z",
+  "__exportSource": "insomnia.desktop.app:v9.0.0",
+  "resources": [
+    {
+      "_id": "wrk_microservices",
+      "_type": "workspace",
+      "parentId": null,
+      "modified": 1743339600000,
+      "created": 1743339600000,
+      "name": "Microservicios",
+      "description": "API Gateway + WhatsApp Service",
+      "scope": "collection"
+    },
+    {
+      "_id": "env_development",
+      "_type": "environment",
+      "parentId": "wrk_microservices",
+      "modified": 1743339600000,
+      "created": 1743339600000,
+      "name": "Development Local",
+      "data": {
+        "gateway_url": "http://localhost:3000",
+        "whatsapp_url": "http://localhost:3001",
+        "api_base": "http://localhost:3000/api"
+      },
+      "_sanitized": true
+    },
+    {
+      "_id": "fld_gateway",
+      "_type": "request_group",
+      "parentId": "wrk_microservices",
+      "modified": 1743339600000,
+      "created": 1743339600000,
+      "name": "Gateway Endpoints",
+      "description": "Endpoints del API Gateway",
+      "environment": {}
+    },
+    {
+      "_id": "req_send_message",
+      "_type": "request",
+      "parentId": "fld_gateway",
+      "modified": 1743339600000,
+      "created": 1743339600000,
+      "url": "{{ api_base }}/v1/messages/send",
+      "name": "1. Enviar mensaje (POST)",
+      "description": "Envía un mensaje a través del gateway.\nEl estado inicial es PENDING.\nLa respuesta es 202 Accepted.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"channel\": \"whatsapp\",\n  \"recipients\": [\"+573205711428\"],\n  \"message\": \"Hola desde Insomnia\",\n  \"metadata\": {\n    \"source\": \"insomnia-testing\",\n    \"timestamp\": \"{{ now }}\"\n  }\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "disabled": false
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -200,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_get_message",
+      "_type": "request",
+      "parentId": "fld_gateway",
+      "modified": 1743339600000,
+      "created": 1743339600000,
+      "url": "{{ api_base }}/v1/messages/550e8400-e29b-41d4-a716-446655440000",
+      "name": "2. Consultar estado del mensaje (GET)",
+      "description": "Consulta el estado de un mensaje.\nReemplaza el UUID con el ID retornado en el paso anterior.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -100,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "fld_webhook",
+      "_type": "request_group",
+      "parentId": "wrk_microservices",
+      "modified": 1743339600000,
+      "created": 1743339600000,
+      "name": "WhatsApp Webhook",
+      "description": "Endpoints del webhook de WhatsApp",
+      "environment": {}
+    },
+    {
+      "_id": "req_webhook_verify",
+      "_type": "request",
+      "parentId": "fld_webhook",
+      "modified": 1743339600000,
+      "created": 1743339600000,
+      "url": "{{ whatsapp_url }}/webhook/whatsapp?hub.mode=subscribe&hub.challenge=12345&hub.verify_token=my_super_secret_webhook_token_change_this",
+      "name": "1. Verificar webhook (GET)",
+      "description": "Simula la verificación de Meta.\nMeta envía un GET con hub.challenge para verificar que el endpoint existe.\nEl servicio debe responder con el valor del challenge.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -200,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_webhook_incoming",
+      "_type": "request",
+      "parentId": "fld_webhook",
+      "modified": 1743339600000,
+      "created": 1743339600000,
+      "url": "{{ whatsapp_url }}/webhook/whatsapp",
+      "name": "2. Simular mensaje entrante (POST)",
+      "description": "Simula un webhook de Meta cuando un usuario envía un mensaje.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"123456789\",\n      \"changes\": [\n        {\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"messages\": [\n              {\n                \"from\": \"573205711428\",\n                \"id\": \"wamid.test.123\",\n                \"timestamp\": \"{{ now }}\",\n                \"text\": {\n                  \"body\": \"Gracias, fue enviado!\"\n                }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "disabled": false
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -100,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "fld_testing_scenarios",
+      "_type": "request_group",
+      "parentId": "wrk_microservices",
+      "modified": 1743339600000,
+      "created": 1743339600000,
+      "name": "Test Scenarios",
+      "description": "Escenarios de testing completos",
+      "environment": {}
+    },
+    {
+      "_id": "req_scenario_multiple_recipients",
+      "_type": "request",
+      "parentId": "fld_testing_scenarios",
+      "modified": 1743339600000,
+      "created": 1743339600000,
+      "url": "{{ api_base }}/v1/messages/send",
+      "name": "Scenario: Envío masivo (3 números)",
+      "description": "Envía a múltiples destinatarios en una sola petición.\nEl gateway y el servicio de WhatsApp manejan esto en paralelo.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"channel\": \"whatsapp\",\n  \"recipients\": [\n    \"+573205711428\",\n    \"+573101234567\",\n    \"+573209999999\"\n  ],\n  \"message\": \"Mensaje masivo desde Insomnia\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "disabled": false
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -200,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_scenario_with_media",
+      "_type": "request",
+      "parentId": "fld_testing_scenarios",
+      "modified": 1743339600000,
+      "created": 1743339600000,
+      "url": "{{ api_base }}/v1/messages/send",
+      "name": "Scenario: Mensaje con imagen",
+      "description": "Envía un mensaje con una URL de imagen.\nMeta soporta jpg, png, webp, etc.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"channel\": \"whatsapp\",\n  \"recipients\": [\"+573205711428\"],\n  \"message\": \"Mira esta imagen\",\n  \"mediaUrl\": \"https://example.com/image.jpg\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "disabled": false
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -150,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_invalid_channel",
+      "_type": "request",
+      "parentId": "fld_testing_scenarios",
+      "modified": 1743339600000,
+      "created": 1743339600000,
+      "url": "{{ api_base }}/v1/messages/send",
+      "name": "Scenario: Canal inválido (debería fallar)",
+      "description": "Intenta enviar a un canal que no existe.\nEl servidor debe rechazar con error 400.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"channel\": \"telegram\",\n  \"recipients\": [\"+573205711428\"],\n  \"message\": \"Esto debería fallar\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "disabled": false
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -100,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    }
+  ]
+}

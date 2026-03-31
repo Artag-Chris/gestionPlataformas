@@ -1,0 +1,160 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// Tablas pre-existentes en la BD (no tocar)
+// ─────────────────────────────────────────
+model days_off {
+  id            Int     @id @default(autoincrement())
+  email         String?
+  vacation_days Int?    @db.SmallInt
+  sick_days     Int?    @db.SmallInt
+}
+
+model inventory {
+  id           Int     @id @default(autoincrement())
+  product_name String?
+  size         String?
+  in_stock     Int?
+}
+
+model n8n_vectors {
+  id        String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  text      String?
+  metadata  Json?
+  embedding Unsupported("vector")?
+}
+
+// ─────────────────────────────────────────
+// Gateway (solo declarar, no tocar)
+// ─────────────────────────────────────────
+model Message {
+  id         String   @id @default(uuid())
+  channel    String
+  recipients String[]
+  body       String
+  metadata   Json?
+  status     String   @default("PENDING")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────
+// WhatsApp service (solo declarar, no tocar)
+// ─────────────────────────────────────────
+model WaMessage {
+  id          String    @id @default(uuid())
+  messageId   String    @unique
+  recipient   String
+  body        String
+  mediaUrl    String?
+  status      String    @default("PENDING")
+  waMessageId String?
+  errorReason String?
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ─────────────────────────────────────────
+// Slack service (solo declarar, no tocar)
+// ─────────────────────────────────────────
+model SlackMessage {
+  id          String    @id @default(uuid())
+  messageId   String    @unique
+  recipient   String
+  body        String
+  mediaUrl    String?
+  status      String    @default("PENDING")
+  slackMsgTs  String?
+  channel     String?
+  errorReason String?
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ─────────────────────────────────────────
+// Notion: registro de operaciones ejecutadas
+// ─────────────────────────────────────────
+model NotionOperation {
+  id          String               @id @default(uuid())
+  messageId   String               @unique
+  operation   String
+  body        String
+  metadata    Json?
+  status      NotionOperationStatus @default(PENDING)
+  notionId    String?
+  errorReason String?
+  executedAt  DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([messageId])
+  @@index([operation])
+  @@index([status])
+}
+
+enum NotionOperationStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+// ─────────────────────────────────────────
+// Instagram service (solo declarar, no tocar)
+// ─────────────────────────────────────────
+model IgMessage {
+  id          String    @id @default(uuid())
+  messageId   String    @unique
+  recipient   String
+  body        String
+  mediaUrl    String?
+  status      String    @default("PENDING")
+  igMessageId String?
+  errorReason String?
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ─────────────────────────────────────────
+// TikTok service (solo declarar, no tocar)
+// ─────────────────────────────────────────
+model TikTokPost {
+  id          String    @id @default(uuid())
+  messageId   String
+  recipient   String
+  caption     String
+  videoUrl    String
+  coverUrl    String?
+  status      String    @default("PENDING")
+  publishId   String?
+  errorReason String?
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ─────────────────────────────────────────
+// Facebook service (solo declarar, no tocar)
+// ─────────────────────────────────────────
+model FbMessage {
+  id          String    @id @default(uuid())
+  messageId   String    @unique
+  recipient   String
+  body        String
+  mediaUrl    String?
+  status      String    @default("PENDING")
+  fbMessageId String?
+  errorReason String?
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}

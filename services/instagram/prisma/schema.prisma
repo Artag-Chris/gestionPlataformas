@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model days_off {
+  id            Int     @id @default(autoincrement())
+  email         String?
+  vacation_days Int?    @db.SmallInt
+  sick_days     Int?    @db.SmallInt
+}
+
+model inventory {
+  id           Int     @id @default(autoincrement())
+  product_name String?
+  size         String?
+  in_stock     Int?
+}
+
+model n8n_vectors {
+  id        String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  text      String?
+  metadata  Json?
+  embedding Unsupported("vector")?
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  channel    String
+  recipients String[]
+  body       String
+  metadata   Json?
+  status     String   @default("PENDING")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model WaMessage {
+  id          String    @id @default(uuid())
+  messageId   String    @unique
+  recipient   String
+  body        String
+  mediaUrl    String?
+  status      String    @default("PENDING")
+  waMessageId String?
+  errorReason String?
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model SlackMessage {
+  id          String    @id @default(uuid())
+  messageId   String    @unique
+  recipient   String
+  body        String
+  mediaUrl    String?
+  status      String    @default("PENDING")
+  slackMsgTs  String?
+  channel     String?
+  errorReason String?
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model NotionOperation {
+  id          String    @id @default(uuid())
+  messageId   String    @unique
+  operation   String
+  body        String
+  metadata    Json?
+  status      String    @default("PENDING")
+  notionId    String?
+  errorReason String?
+  executedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ─────────────────────────────────────────
+// Instagram: registro de mensajes enviados
+// ─────────────────────────────────────────
+model IgMessage {
+  id          String        @id @default(uuid())
+  messageId   String        @unique
+  recipient   String
+  body        String
+  mediaUrl    String?
+  status      IgMsgStatus   @default(PENDING)
+  igMessageId String?
+  errorReason String?
+  sentAt      DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([messageId])
+  @@index([recipient])
+  @@index([status])
+}
+
+enum IgMsgStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model TikTokPost {
+  id          String    @id @default(uuid())
+  messageId   String
+  recipient   String
+  caption     String
+  videoUrl    String
+  coverUrl    String?
+  status      String    @default("PENDING")
+  publishId   String?
+  errorReason String?
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model FbMessage {
+  id          String    @id @default(uuid())
+  messageId   String    @unique
+  recipient   String
+  body        String
+  mediaUrl    String?
+  status      String    @default("PENDING")
+  fbMessageId String?
+  errorReason String?
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
