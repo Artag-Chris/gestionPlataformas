@@ -1,0 +1,216 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Pre-existing tables (never drop) ────────────────────────────────────────
+
+model days_off {
+  id            Int     @id @default(autoincrement())
+  email         String?
+  vacation_days Int?    @db.SmallInt
+  sick_days     Int?    @db.SmallInt
+}
+
+model inventory {
+  id           Int     @id @default(autoincrement())
+  product_name String?
+  size         String?
+  in_stock     Int?
+}
+
+model n8n_vectors {
+  id        String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  text      String?
+  metadata  Json?
+  embedding Unsupported("vector")?
+}
+
+// ─── Gateway ──────────────────────────────────────────────────────────────────
+
+model Message {
+  id         String        @id @default(uuid())
+  channel    String
+  recipients String[]
+  body       String
+  metadata   Json?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  status     MessageStatus @default(PENDING)
+
+  @@index([channel])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ─── WhatsApp ─────────────────────────────────────────────────────────────────
+
+model WaMessage {
+  id            String          @id @default(uuid())
+  messageId     String          @unique
+  recipient     String
+  body          String
+  mediaUrl      String?
+  status        WaMessageStatus @default(PENDING)
+  waMessageId   String?
+  errorReason   String?
+  templateUsed  Boolean         @default(false)
+  sentAt        DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+// ─── Slack ────────────────────────────────────────────────────────────────────
+
+model SlackMessage {
+  id          String             @id @default(uuid())
+  messageId   String             @unique
+  recipient   String
+  body        String
+  mediaUrl    String?
+  status      SlackMessageStatus @default(PENDING)
+  slackMsgTs  String?
+  channel     String?
+  errorReason String?
+  sentAt      DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+}
+
+// ─── Notion ───────────────────────────────────────────────────────────────────
+
+model NotionOperation {
+  id          String              @id @default(uuid())
+  messageId   String              @unique
+  operation   String
+  body        String
+  metadata    Json?
+  status      NotionOpStatus      @default(PENDING)
+  notionId    String?
+  errorReason String?
+  executedAt  DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+}
+
+// ─── Instagram ────────────────────────────────────────────────────────────────
+
+model IgMessage {
+  id          String          @id @default(uuid())
+  messageId   String          @unique
+  recipient   String
+  body        String
+  mediaUrl    String?
+  status      IgMessageStatus @default(PENDING)
+  igMessageId String?
+  errorReason String?
+  sentAt      DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+// ─── TikTok ───────────────────────────────────────────────────────────────────
+
+model TikTokPost {
+  id          String          @id @default(uuid())
+  messageId   String
+  recipient   String
+  caption     String
+  videoUrl    String
+  coverUrl    String?
+  status      TikTokPostStatus @default(PENDING)
+  publishId   String?
+  errorReason String?
+  sentAt      DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+// ─── Facebook ─────────────────────────────────────────────────────────────────
+
+model FbMessage {
+  id          String          @id @default(uuid())
+  messageId   String          @unique
+  recipient   String
+  body        String
+  mediaUrl    String?
+  status      FbMessageStatus @default(PENDING)
+  fbMessageId String?
+  errorReason String?
+  sentAt      DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+// ─── Email ────────────────────────────────────────────────────────────────────
+
+model EmailMessage {
+  id          String        @id @default(uuid())
+  messageId   String        @unique
+  recipient   String
+  subject     String
+  body        String
+  status      EmailStatus   @default(PENDING)
+  resendMsgId String?
+  errorReason String?
+  sentAt      DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum MessageStatus {
+  PENDING
+  SENT
+  FAILED
+  PARTIAL
+}
+
+enum WaMessageStatus {
+  PENDING
+  SENT
+  FAILED
+  DELIVERED
+  READ
+}
+
+enum SlackMessageStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum NotionOpStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum IgMessageStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum TikTokPostStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum FbMessageStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
