@@ -65,7 +65,7 @@ export class InstagramService {
     message: string,
     mediaUrl?: string | null,
   ): Promise<void> {
-    const record = await this.prisma.igMessage.create({
+     const record = await this.prisma.igMessage.create({
       data: {
         id: uuidv4(),
         messageId,
@@ -77,29 +77,38 @@ export class InstagramService {
     });
 
     try {
-      const payload = this.buildPayload(recipient, message, mediaUrl);
-      const response = await axios.post<MetaApiResponse>(this.apiUrl, payload, {
-        params: { access_token: this.accessToken },
-        headers: { 'Content-Type': 'application/json' },
-      });
+       const payload = this.buildPayload(recipient, message, mediaUrl);
+       console.log(`[INSTAGRAM] Sending to ${recipient} | URL: ${this.apiUrl}`);
+       const response = await axios.post<MetaApiResponse>(this.apiUrl, payload, {
+         params: { access_token: this.accessToken },
+         headers: { 'Content-Type': 'application/json' },
+       });
 
-      await this.prisma.igMessage.update({
-        where: { id: record.id },
-        data: { status: 'SENT', igMessageId: response.data.message_id, sentAt: new Date() },
-      });
+       await this.prisma.igMessage.update({
+         where: { id: record.id },
+         data: { status: 'SENT', igMessageId: response.data.message_id, sentAt: new Date() },
+       });
 
-      this.logger.log(`Sent to ${recipient} | igMessageId: ${response.data.message_id}`);
-    } catch (error) {
-      const reason = this.extractError(error);
+       this.logger.log(`Sent to ${recipient} | igMessageId: ${response.data.message_id}`);
+     } catch (error) {
+       const reason = this.extractError(error);
+       console.error(`[INSTAGRAM_ERROR] Failed to send to ${recipient}:`, reason);
+       if (axios.isAxiosError(error)) {
+         console.error(`[INSTAGRAM_API_ERROR]`, {
+           status: error.response?.status,
+           statusText: error.response?.statusText,
+           data: error.response?.data,
+         });
+       }
 
-      await this.prisma.igMessage.update({
-        where: { id: record.id },
-        data: { status: 'FAILED', errorReason: reason },
-      });
+       await this.prisma.igMessage.update({
+         where: { id: record.id },
+         data: { status: 'FAILED', errorReason: reason },
+       });
 
-      this.logger.error(`Failed to send to ${recipient}: ${reason}`);
-      throw new Error(reason);
-    }
+       this.logger.error(`Failed to send to ${recipient}: ${reason}`);
+       throw new Error(reason);
+     }
   }
 
   private buildPayload(recipient: string, message: string, mediaUrl?: string | null) {
@@ -135,5 +144,27 @@ export class InstagramService {
       return axiosError.response?.data?.error?.message ?? axiosError.message;
     }
     return error instanceof Error ? error.message : String(error);
+  }
+
+  async getConversations(): Promise<Array<{ conversationId: string; igsid: string; username?: string }>> {
+    try {
+      const url = `https://graph.facebook.com/v19.0/${this.config.get<string>('INSTAGRAM_PAGE_ID')}/conversations`;
+      const response = await axios.get(url, {
+        params: {
+          access_token: this.accessToken,
+          fields: 'id,participants,senders',
+        },
+      });
+
+      const conversations = response.data.data || [];
+      return conversations.map((conv: any) => ({
+        conversationId: conv.id,
+        igsid: conv.senders?.[0]?.id || conv.id,
+        username: conv.senders?.[0]?.name,
+      }));
+    } catch (error) {
+      this.logger.error(`Failed to fetch conversations: ${this.extractError(error)}`);
+      throw error;
+    }
   }
 }
