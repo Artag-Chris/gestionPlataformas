@@ -123,55 +123,36 @@ export class WhatsappService {
     } catch (error) {
       const { reason, detail, errorCode } = this.extractErrorDetail(error);
 
-      // Detectar si es error de ventana de 24 horas o mensaje no entregable
-      // Error 131047 = Re-engagement message (fuera de ventana 24h)
-      // Error 131026 = Message undeliverable
-      const shouldUseTemplate = errorCode === 131047 || errorCode === 131026;
+      this.logger.warn(
+        `Failed to send normal message to ${recipient} | errorCode: ${errorCode} | reason: ${reason}\n` +
+          `  Attempting template fallback...`,
+      );
 
-      if (shouldUseTemplate) {
-        this.logger.warn(
-          `Template fallback triggered for ${recipient} | errorCode: ${errorCode} | trying template: ${this.templateName}`,
+      try {
+        // Intentar enviar con la plantilla como fallback
+        await this.sendTemplate(recipient, record.id, messageId);
+        return; // Éxito con plantilla
+      } catch (templateError) {
+        const { reason: templateReason, detail: templateDetail } = this.extractErrorDetail(templateError);
+
+        await this.prisma.waMessage.update({
+          where: { id: record.id },
+          data: {
+            status: 'FAILED',
+            errorReason: `[Template fallback failed] ${templateReason} | [Original error] ${reason}`,
+            templateUsed: true,
+          },
+        });
+
+        this.logger.error(
+          `Template fallback FAILED for ${recipient}\n` +
+            `  [Original error] ${reason}\n` +
+            `  [Template error] ${templateReason}\n` +
+            `  ${templateDetail}`,
         );
 
-        try {
-          // Intentar enviar con la plantilla
-          await this.sendTemplate(recipient, record.id, messageId);
-          return; // Éxito con plantilla
-        } catch (templateError) {
-          const { reason: templateReason, detail: templateDetail } = this.extractErrorDetail(templateError);
-
-          await this.prisma.waMessage.update({
-            where: { id: record.id },
-            data: {
-              status: 'FAILED',
-              errorReason: `[Template fallback failed] ${templateReason} | [Original error] ${reason}`,
-              templateUsed: true,
-            },
-          });
-
-          this.logger.error(
-            `Template fallback FAILED for ${recipient}\n` +
-              `  [Original error] ${reason}\n` +
-              `  [Template error] ${templateReason}\n` +
-              `  ${templateDetail}`,
-          );
-
-          throw new Error(`${reason} + template fallback also failed: ${templateReason}`);
-        }
+        throw new Error(`${reason} + template fallback also failed: ${templateReason}`);
       }
-
-      // Si no es error de 24h, fallar sin intentar template
-      await this.prisma.waMessage.update({
-        where: { id: record.id },
-        data: { status: 'FAILED', errorReason: reason },
-      });
-
-      this.logger.error(
-        `Failed to send to ${recipient}\n` +
-          `  reason   : ${reason}\n` +
-          `  ${detail}`,
-      );
-      throw new Error(reason);
     }
   }
 
