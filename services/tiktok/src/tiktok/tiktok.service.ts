@@ -72,7 +72,7 @@ export class TikTokService {
         caption: dto.message,
         videoUrl: dto.videoUrl,
         coverUrl: dto.coverUrl ?? null,
-        status: 'PROCESSING',
+        status: 'PENDING',
       },
     });
 
@@ -119,7 +119,7 @@ export class TikTokService {
       await this.prisma.tikTokPost.update({
         where: { id: record.id },
         data: {
-          status: 'PROCESSING',
+          status: 'PENDING',
           publishId: publishId ?? null,
           sentAt: new Date(),
         },
@@ -142,8 +142,8 @@ export class TikTokService {
   private resolveStatus(
     sent: number,
     failed: number,
-  ): 'PROCESSING' | 'PUBLISHED' | 'FAILED' | 'PARTIAL' {
-    if (failed === 0) return 'PROCESSING';
+  ): 'SENT' | 'FAILED' | 'PARTIAL' {
+    if (failed === 0) return 'SENT';
     if (sent === 0) return 'FAILED';
     return 'PARTIAL';
   }

@@ -5,7 +5,7 @@ export interface TikTokPostError {
 
 export class TikTokResponseDto {
   messageId: string;
-  status: 'PROCESSING' | 'PUBLISHED' | 'FAILED' | 'PARTIAL';
+  status: 'SENT' | 'FAILED' | 'PARTIAL';
   sentCount: number;
   failedCount: number;
   errors?: TikTokPostError[];
