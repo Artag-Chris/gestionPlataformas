@@ -4,6 +4,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
 import { WebsocketModule } from './websocket/ws.module';
 import { MessagesModule } from './v1/messages/messages.module';
+import { WebhookModule } from './webhooks/webhook.module';
 // import { AuthModule } from './auth/auth.module'; // TODO: activar cuando implementemos auth
 
 @Module({
@@ -20,6 +21,7 @@ import { MessagesModule } from './v1/messages/messages.module';
 
     // Módulos versionados
     MessagesModule,
+    WebhookModule,
 
     // TODO: AuthModule - descomentar cuando activemos autenticación
     // AuthModule,

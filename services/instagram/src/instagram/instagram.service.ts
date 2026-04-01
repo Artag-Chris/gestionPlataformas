@@ -59,57 +59,57 @@ export class InstagramService {
     };
   }
 
-  private async sendToOne(
-    messageId: string,
-    recipient: string,
-    message: string,
-    mediaUrl?: string | null,
-  ): Promise<void> {
-     const record = await this.prisma.igMessage.create({
-      data: {
-        id: uuidv4(),
-        messageId,
-        recipient,
-        body: message,
-        mediaUrl: mediaUrl ?? null,
-        status: 'PENDING',
-      },
-    });
+   private async sendToOne(
+     messageId: string,
+     recipient: string,
+     message: string,
+     mediaUrl?: string | null,
+   ): Promise<void> {
+      const record = await this.prisma.igMessage.create({
+       data: {
+         id: uuidv4(),
+         messageId,
+         recipient,
+         body: message,
+         mediaUrl: mediaUrl ?? null,
+         status: 'PENDING',
+       },
+     });
 
-    try {
-       const payload = this.buildPayload(recipient, message, mediaUrl);
-       console.log(`[INSTAGRAM] Sending to ${recipient} | URL: ${this.apiUrl}`);
-       const response = await axios.post<MetaApiResponse>(this.apiUrl, payload, {
-         params: { access_token: this.accessToken },
-         headers: { 'Content-Type': 'application/json' },
-       });
+     try {
+        const payload = this.buildPayload(recipient, message, mediaUrl);
+        console.log(`[INSTAGRAM] Sending to ${recipient} | URL: ${this.apiUrl}`);
+        const response = await axios.post<MetaApiResponse>(this.apiUrl, payload, {
+          params: { access_token: this.accessToken },
+          headers: { 'Content-Type': 'application/json' },
+        });
 
-       await this.prisma.igMessage.update({
-         where: { id: record.id },
-         data: { status: 'SENT', igMessageId: response.data.message_id, sentAt: new Date() },
-       });
+        await this.prisma.igMessage.update({
+          where: { id: record.id },
+          data: { status: 'SENT', igMessageId: response.data.message_id, sentAt: new Date() },
+        });
 
-       this.logger.log(`Sent to ${recipient} | igMessageId: ${response.data.message_id}`);
-     } catch (error) {
-       const reason = this.extractError(error);
-       console.error(`[INSTAGRAM_ERROR] Failed to send to ${recipient}:`, reason);
-       if (axios.isAxiosError(error)) {
-         console.error(`[INSTAGRAM_API_ERROR]`, {
-           status: error.response?.status,
-           statusText: error.response?.statusText,
-           data: error.response?.data,
-         });
-       }
+        this.logger.log(`Sent to ${recipient} | igMessageId: ${response.data.message_id}`);
+      } catch (error) {
+        const reason = this.extractError(error);
+        console.error(`[INSTAGRAM_ERROR] Failed to send to ${recipient}:`, reason);
+        if (axios.isAxiosError(error)) {
+          console.error(`[INSTAGRAM_API_ERROR]`, {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data,
+          });
+        }
 
-       await this.prisma.igMessage.update({
-         where: { id: record.id },
-         data: { status: 'FAILED', errorReason: reason },
-       });
+        await this.prisma.igMessage.update({
+          where: { id: record.id },
+          data: { status: 'FAILED', errorReason: reason },
+        });
 
-       this.logger.error(`Failed to send to ${recipient}: ${reason}`);
-       throw new Error(reason);
-     }
-  }
+        this.logger.error(`Failed to send to ${recipient}: ${reason}`);
+        throw new Error(reason);
+      }
+   }
 
   private buildPayload(recipient: string, message: string, mediaUrl?: string | null) {
     if (mediaUrl) {
@@ -146,25 +146,67 @@ export class InstagramService {
     return error instanceof Error ? error.message : String(error);
   }
 
-  async getConversations(): Promise<Array<{ conversationId: string; igsid: string; username?: string }>> {
-    try {
-      const url = `https://graph.facebook.com/v19.0/${this.config.get<string>('INSTAGRAM_PAGE_ID')}/conversations`;
-      const response = await axios.get(url, {
-        params: {
-          access_token: this.accessToken,
-          fields: 'id,participants,senders',
-        },
-      });
+   /**
+    * Send a message to a single Instagram user by IGSID.
+    * This is used when you already know the IGSID of the recipient.
+    */
+   async sendToInstagramUser(igsid: string, message: string, mediaUrl?: string): Promise<{
+     messageId: string;
+     igsid: string;
+     status: 'SENT' | 'FAILED';
+     timestamp: string;
+   }> {
+     const messageId = uuidv4();
+     try {
+       await this.sendToOne(messageId, igsid, message, mediaUrl);
+       return {
+         messageId,
+         igsid,
+         status: 'SENT',
+         timestamp: new Date().toISOString(),
+       };
+     } catch (error) {
+       return {
+         messageId,
+         igsid,
+         status: 'FAILED',
+         timestamp: new Date().toISOString(),
+       };
+     }
+   }
 
-      const conversations = response.data.data || [];
-      return conversations.map((conv: any) => ({
-        conversationId: conv.id,
-        igsid: conv.senders?.[0]?.id || conv.id,
-        username: conv.senders?.[0]?.name,
-      }));
-    } catch (error) {
-      this.logger.error(`Failed to fetch conversations: ${this.extractError(error)}`);
-      throw error;
-    }
-  }
+   async getConversations(): Promise<Array<{ conversationId: string; igsid: string; username?: string }>> {
+     try {
+       const businessAccountId = this.config.get<string>('INSTAGRAM_BUSINESS_ACCOUNT_ID');
+       console.log(`[INSTAGRAM] Fetching conversations for Business Account ID: ${businessAccountId}`);
+       
+       const url = `https://graph.facebook.com/v19.0/${businessAccountId}/conversations`;
+       console.log(`[INSTAGRAM] API URL: ${url}`);
+       
+       const response = await axios.get(url, {
+         params: {
+           access_token: this.accessToken,
+           fields: 'id,senders,participants,message',
+           user_id: businessAccountId,
+         },
+       });
+
+       console.log(`[INSTAGRAM] API Response:`, JSON.stringify(response.data));
+       
+       const conversations = response.data.data || [];
+       const result = conversations.map((conv: any) => ({
+         conversationId: conv.id,
+         igsid: conv.senders?.[0]?.id || conv.id,
+         username: conv.senders?.[0]?.name,
+       }));
+       
+       console.log(`[INSTAGRAM] Returning ${result.length} conversations`);
+       return result;
+     } catch (error) {
+       const errorMsg = this.extractError(error);
+       console.error(`[INSTAGRAM_ERROR] Failed to fetch conversations:`, errorMsg);
+       this.logger.error(`Failed to fetch conversations: ${errorMsg}`);
+       throw error;
+     }
+   }
 }

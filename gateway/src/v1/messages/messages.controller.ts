@@ -44,6 +44,22 @@ export class MessagesController {
   }
 
   /**
+   * Enviar un mensaje directo a un usuario de Instagram por IGSID.
+   * Usado cuando ya conoces el IGSID del destinatario.
+   *
+   * POST /api/v1/messages/instagram/:igsid
+   * Body: { message, mediaUrl? }
+   */
+  @Post('instagram/:igsid')
+  @HttpCode(HttpStatus.ACCEPTED) // 202 → aceptado, procesando en background
+  async sendToInstagramUser(
+    @Param('igsid') igsid: string,
+    @Body() body: { message: string; mediaUrl?: string },
+  ): Promise<{ messageId: string; igsid: string; status: 'SENT' | 'FAILED'; timestamp: string }> {
+    return this.messages.sendToInstagramUser(igsid, body.message, body.mediaUrl);
+  }
+
+  /**
    * Consultar el estado de un mensaje por ID.
    * Útil para que N8N verifique si el mensaje fue enviado.
    *

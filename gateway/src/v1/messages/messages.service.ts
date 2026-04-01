@@ -114,4 +114,30 @@ export class MessagesService {
       throw error;
     }
   }
+
+  async sendToInstagramUser(
+    igsid: string,
+    message: string,
+    mediaUrl?: string,
+  ): Promise<{ messageId: string; igsid: string; status: 'SENT' | 'FAILED'; timestamp: string }> {
+    try {
+      const instagramServiceUrl = this.config.get<string>('INSTAGRAM_SERVICE_URL') ?? 'http://instagram:3004';
+      const response = await fetch(`${instagramServiceUrl}/send/${igsid}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, mediaUrl }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Instagram service returned ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      this.logger.log(`Message sent to Instagram user ${igsid}: ${result.messageId}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to send message to Instagram user ${igsid}: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
+  }
 }
