@@ -50,17 +50,18 @@ model Message {
 // ─── WhatsApp ─────────────────────────────────────────────────────────────────
 
 model WaMessage {
-  id          String          @id @default(uuid())
-  messageId   String          @unique
-  recipient   String
-  body        String
-  mediaUrl    String?
-  status      WaMessageStatus @default(PENDING)
-  waMessageId String?
-  errorReason String?
-  sentAt      DateTime?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id            String          @id @default(uuid())
+  messageId     String          @unique
+  recipient     String
+  body          String
+  mediaUrl      String?
+  status        WaMessageStatus @default(PENDING)
+  waMessageId   String?
+  errorReason   String?
+  templateUsed  Boolean         @default(false)
+  sentAt        DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 }
 
 // ─── Slack ────────────────────────────────────────────────────────────────────
@@ -145,6 +146,22 @@ model FbMessage {
   updatedAt   DateTime        @updatedAt
 }
 
+// ─── Email ────────────────────────────────────────────────────────────────────
+
+model EmailMessage {
+  id          String        @id @default(uuid())
+  messageId   String        @unique
+  recipient   String
+  subject     String
+  body        String
+  status      EmailStatus   @default(PENDING)
+  resendMsgId String?
+  errorReason String?
+  sentAt      DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 enum MessageStatus {
@@ -187,6 +204,12 @@ enum TikTokPostStatus {
 }
 
 enum FbMessageStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum EmailStatus {
   PENDING
   SENT
   FAILED

@@ -26,15 +26,20 @@ export class WhatsappService {
   private readonly apiUrl: string;
   private readonly apiToken: string;
   private readonly phoneNumberId: string;
+  private readonly apiVersion: string;
+  private readonly templateName: string;
+  private readonly templateLanguage: string;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
-    const version = config.get<string>('WHATSAPP_API_VERSION') ?? 'v19.0';
+    this.apiVersion = config.get<string>('WHATSAPP_API_VERSION') ?? 'v19.0';
     this.phoneNumberId = config.getOrThrow<string>('WHATSAPP_PHONE_NUMBER_ID');
     this.apiToken = config.getOrThrow<string>('WHATSAPP_API_TOKEN');
-    this.apiUrl = `https://graph.facebook.com/${version}/${this.phoneNumberId}/messages`;
+    this.apiUrl = `https://graph.facebook.com/${this.apiVersion}/${this.phoneNumberId}/messages`;
+    this.templateName = config.get<string>('WHATSAPP_TEMPLATE_NAME') ?? 'presentacion_de_ia';
+    this.templateLanguage = config.get<string>('WHATSAPP_TEMPLATE_LANGUAGE') ?? 'en';
   }
 
   // ─────────────────────────────────────────
@@ -89,6 +94,7 @@ export class WhatsappService {
         body: message,
         mediaUrl: mediaUrl ?? null,
         status: 'PENDING',
+        templateUsed: false,
       },
     });
 
@@ -115,8 +121,46 @@ export class WhatsappService {
 
       this.logger.log(`Sent to ${recipient} | waMessageId: ${waMessageId}`);
     } catch (error) {
-      const { reason, detail } = this.extractErrorDetail(error);
+      const { reason, detail, errorCode } = this.extractErrorDetail(error);
 
+      // Detectar si es error de ventana de 24 horas o mensaje no entregable
+      // Error 131047 = Re-engagement message (fuera de ventana 24h)
+      // Error 131026 = Message undeliverable
+      const shouldUseTemplate = errorCode === 131047 || errorCode === 131026;
+
+      if (shouldUseTemplate) {
+        this.logger.warn(
+          `Template fallback triggered for ${recipient} | errorCode: ${errorCode} | trying template: ${this.templateName}`,
+        );
+
+        try {
+          // Intentar enviar con la plantilla
+          await this.sendTemplate(recipient, record.id, messageId);
+          return; // Éxito con plantilla
+        } catch (templateError) {
+          const { reason: templateReason, detail: templateDetail } = this.extractErrorDetail(templateError);
+
+          await this.prisma.waMessage.update({
+            where: { id: record.id },
+            data: {
+              status: 'FAILED',
+              errorReason: `[Template fallback failed] ${templateReason} | [Original error] ${reason}`,
+              templateUsed: true,
+            },
+          });
+
+          this.logger.error(
+            `Template fallback FAILED for ${recipient}\n` +
+              `  [Original error] ${reason}\n` +
+              `  [Template error] ${templateReason}\n` +
+              `  ${templateDetail}`,
+          );
+
+          throw new Error(`${reason} + template fallback also failed: ${templateReason}`);
+        }
+      }
+
+      // Si no es error de 24h, fallar sin intentar template
       await this.prisma.waMessage.update({
         where: { id: record.id },
         data: { status: 'FAILED', errorReason: reason },
@@ -129,6 +173,51 @@ export class WhatsappService {
       );
       throw new Error(reason);
     }
+  }
+
+  // ─────────────────────────────────────────
+  // Enviar plantilla como fallback
+  // ─────────────────────────────────────────
+
+  private async sendTemplate(recipient: string, recordId: string, messageId: string): Promise<void> {
+    const templatePayload = {
+      messaging_product: 'whatsapp',
+      to: recipient,
+      type: 'template',
+      template: {
+        name: this.templateName,
+        language: {
+          code: this.templateLanguage,
+        },
+      },
+    };
+
+    this.logger.debug(
+      `[sendTemplate] Calling Meta API with template → URL: ${this.apiUrl} | recipient: ${recipient} | template: ${this.templateName}`,
+    );
+
+    const response = await axios.post<MetaApiResponse>(this.apiUrl, templatePayload, {
+      headers: {
+        Authorization: `Bearer ${this.apiToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const waMessageId = response.data.messages[0]?.id;
+
+    await this.prisma.waMessage.update({
+      where: { id: recordId },
+      data: {
+        status: 'SENT',
+        waMessageId,
+        sentAt: new Date(),
+        templateUsed: true,
+      },
+    });
+
+    this.logger.log(
+      `Sent template to ${recipient} | waMessageId: ${waMessageId} | template: ${this.templateName}`,
+    );
   }
 
   // ─────────────────────────────────────────
@@ -166,13 +255,14 @@ export class WhatsappService {
     return 'PARTIAL';
   }
 
-  private extractErrorDetail(error: unknown): { reason: string; detail: string } {
+  private extractErrorDetail(error: unknown): { reason: string; detail: string; errorCode?: number } {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError<MetaApiError>;
       const httpStatus = axiosError.response?.status ?? 'no-response';
       const metaError = axiosError.response?.data?.error;
 
       const reason = metaError?.message ?? axiosError.message;
+      const errorCode = metaError?.code;
       const detail =
         `httpStatus: ${httpStatus}\n` +
         `  metaCode : ${metaError?.code ?? 'n/a'}\n` +
@@ -182,7 +272,7 @@ export class WhatsappService {
         `  apiUrl   : ${this.apiUrl}\n` +
         `  rawBody  : ${JSON.stringify(axiosError.response?.data ?? null)}`;
 
-      return { reason, detail };
+      return { reason, detail, errorCode };
     }
 
     const reason = error instanceof Error ? error.message : String(error);
