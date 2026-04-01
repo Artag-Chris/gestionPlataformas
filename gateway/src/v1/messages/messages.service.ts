@@ -1,5 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RabbitMQService } from '../../rabbitmq/rabbitmq.service';
 import { ROUTING_KEYS } from '../../rabbitmq/constants/queues';
@@ -24,6 +25,7 @@ export class MessagesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbitmq: RabbitMQService,
+    private readonly config: ConfigService,
   ) {}
 
   async send(dto: SendMessageDto): Promise<MessageResponseDto> {
@@ -92,5 +94,24 @@ export class MessagesService {
     });
 
     this.logger.log(`Message ${messageId} status updated → ${status}`);
+  }
+
+  async getInstagramConversations(): Promise<Array<{ conversationId: string; igsid: string; username?: string }>> {
+    try {
+      const instagramServiceUrl = this.config.get<string>('INSTAGRAM_SERVICE_URL') ?? 'http://instagram:3004';
+      const response = await fetch(`${instagramServiceUrl}/conversations`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Instagram service returned ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      this.logger.error(`Failed to fetch Instagram conversations: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
   }
 }

@@ -33,6 +33,17 @@ export class MessagesController {
   }
 
   /**
+   * Obtener conversaciones de Instagram con IGSIDs.
+   * Útil para obtener los IDs de usuarios para enviar mensajes de Instagram.
+   *
+   * GET /api/v1/messages/instagram/conversations
+   */
+  @Get('instagram/conversations')
+  async getInstagramConversations(): Promise<Array<{ conversationId: string; igsid: string; username?: string }>> {
+    return this.messages.getInstagramConversations();
+  }
+
+  /**
    * Consultar el estado de un mensaje por ID.
    * Útil para que N8N verifique si el mensaje fue enviado.
    *
