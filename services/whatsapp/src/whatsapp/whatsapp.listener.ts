@@ -14,15 +14,59 @@ export class WhatsappListener implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    // Listen to outgoing messages
     await this.rabbitmq.subscribe(
       QUEUES.WHATSAPP_SEND,
       ROUTING_KEYS.WHATSAPP_SEND,
       (payload) => this.handleSendMessage(payload),
     );
+
+    // Listen to incoming events
+    await this.rabbitmq.subscribe(
+      QUEUES.WHATSAPP_EVENTS_MESSAGE,
+      ROUTING_KEYS.WHATSAPP_MESSAGE_RECEIVED,
+      (payload) => this.handleMessageReceived(payload),
+    );
+
+    await this.rabbitmq.subscribe(
+      QUEUES.WHATSAPP_EVENTS_MESSAGE_ECHO,
+      ROUTING_KEYS.WHATSAPP_MESSAGE_ECHO_RECEIVED,
+      (payload) => this.handleMessageEcho(payload),
+    );
+
+    await this.rabbitmq.subscribe(
+      QUEUES.WHATSAPP_EVENTS_CALLS,
+      ROUTING_KEYS.WHATSAPP_CALLS_RECEIVED,
+      (payload) => this.handleCalls(payload),
+    );
+
+    await this.rabbitmq.subscribe(
+      QUEUES.WHATSAPP_EVENTS_FLOWS,
+      ROUTING_KEYS.WHATSAPP_FLOWS_RECEIVED,
+      (payload) => this.handleFlows(payload),
+    );
+
+    await this.rabbitmq.subscribe(
+      QUEUES.WHATSAPP_EVENTS_PHONE_NUMBER_UPDATE,
+      ROUTING_KEYS.WHATSAPP_PHONE_NUMBER_UPDATE,
+      (payload) => this.handlePhoneNumberUpdate(payload),
+    );
+
+    await this.rabbitmq.subscribe(
+      QUEUES.WHATSAPP_EVENTS_TEMPLATE_UPDATE,
+      ROUTING_KEYS.WHATSAPP_TEMPLATE_UPDATE,
+      (payload) => this.handleTemplateUpdate(payload),
+    );
+
+    await this.rabbitmq.subscribe(
+      QUEUES.WHATSAPP_EVENTS_ALERTS,
+      ROUTING_KEYS.WHATSAPP_ALERTS_RECEIVED,
+      (payload) => this.handleAccountAlerts(payload),
+    );
   }
 
   // ─────────────────────────────────────────
-  // Procesador de mensajes entrantes
+  // Outgoing Message Handler
   // ─────────────────────────────────────────
 
   private async handleSendMessage(payload: Record<string, unknown>): Promise<void> {
@@ -55,5 +99,44 @@ export class WhatsappListener implements OnModuleInit {
     this.logger.log(
       `Message ${dto.messageId} done → status: ${response.status} | sent: ${response.sentCount} | failed: ${response.failedCount}`,
     );
+  }
+
+  // ─────────────────────────────────────────
+  // Incoming Event Handlers (Placeholder)
+  // ─────────────────────────────────────────
+
+  private async handleMessageReceived(payload: Record<string, unknown>): Promise<void> {
+    this.logger.log(`📨 Message received event: ${JSON.stringify(payload)}`);
+    // TODO: Implement incoming message handling logic
+  }
+
+  private async handleMessageEcho(payload: Record<string, unknown>): Promise<void> {
+    this.logger.log(`🔄 Message echo received event: ${JSON.stringify(payload)}`);
+    // TODO: Implement message echo/delivery tracking logic
+  }
+
+  private async handleCalls(payload: Record<string, unknown>): Promise<void> {
+    this.logger.log(`📞 Calls event: ${JSON.stringify(payload)}`);
+    // TODO: Implement calls handling logic
+  }
+
+  private async handleFlows(payload: Record<string, unknown>): Promise<void> {
+    this.logger.log(`🌊 Flows event: ${JSON.stringify(payload)}`);
+    // TODO: Implement flows handling logic
+  }
+
+  private async handlePhoneNumberUpdate(payload: Record<string, unknown>): Promise<void> {
+    this.logger.log(`📞 Phone number update event: ${JSON.stringify(payload)}`);
+    // TODO: Implement phone number update handling logic
+  }
+
+  private async handleTemplateUpdate(payload: Record<string, unknown>): Promise<void> {
+    this.logger.log(`📋 Template update event: ${JSON.stringify(payload)}`);
+    // TODO: Implement template update handling logic
+  }
+
+  private async handleAccountAlerts(payload: Record<string, unknown>): Promise<void> {
+    this.logger.log(`⚠️ Account alerts event: ${JSON.stringify(payload)}`);
+    // TODO: Implement account alerts handling logic
   }
 }

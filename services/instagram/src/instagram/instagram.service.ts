@@ -19,17 +19,16 @@ interface MetaApiError {
 export class InstagramService {
   private readonly logger = new Logger(InstagramService.name);
   private readonly apiUrl: string;
-  private readonly accessToken: string;
+  private readonly pageToken: string;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
-    const version = config.get<string>('INSTAGRAM_API_VERSION') ?? 'v19.0';
-    const pageId = config.getOrThrow<string>('INSTAGRAM_PAGE_ID');
-    this.accessToken = config.getOrThrow<string>('INSTAGRAM_ACCESS_TOKEN');
-    // Instagram Messaging uses the same Graph API endpoint as Facebook Messenger
-    this.apiUrl = `https://graph.facebook.com/${version}/${pageId}/messages`;
+    const version = config.get<string>('INSTAGRAM_API_VERSION') ?? 'v21.0';
+    // Use Instagram Graph API endpoint (not Facebook Graph API)
+    this.pageToken = config.getOrThrow<string>('INSTAGRAM_PAGE_TOKEN');
+    this.apiUrl = `https://graph.instagram.com/${version}/me/messages`;
   }
 
   async sendToRecipients(dto: SendInstagramDto): Promise<InstagramResponseDto> {
@@ -76,13 +75,16 @@ export class InstagramService {
        },
      });
 
-     try {
-        const payload = this.buildPayload(recipient, message, mediaUrl);
-        console.log(`[INSTAGRAM] Sending to ${recipient} | URL: ${this.apiUrl}`);
-        const response = await axios.post<MetaApiResponse>(this.apiUrl, payload, {
-          params: { access_token: this.accessToken },
-          headers: { 'Content-Type': 'application/json' },
-        });
+      try {
+         const payload = this.buildPayload(recipient, message, mediaUrl);
+         console.log(`[INSTAGRAM] Sending to ${recipient} | URL: ${this.apiUrl}`);
+         console.log(`[INSTAGRAM] Using Authorization header with pageToken`);
+         const response = await axios.post<MetaApiResponse>(this.apiUrl, payload, {
+           headers: { 
+             'Content-Type': 'application/json',
+             'Authorization': `Bearer ${this.pageToken}`,
+           },
+         });
 
         await this.prisma.igMessage.update({
           where: { id: record.id },
@@ -183,13 +185,13 @@ export class InstagramService {
        const url = `https://graph.facebook.com/v19.0/${businessAccountId}/conversations`;
        console.log(`[INSTAGRAM] API URL: ${url}`);
        
-       const response = await axios.get(url, {
-         params: {
-           access_token: this.accessToken,
-           fields: 'id,senders,participants,message',
-           user_id: businessAccountId,
-         },
-       });
+        const response = await axios.get(url, {
+          params: {
+            access_token: this.pageToken,
+            fields: 'id,senders,participants,message',
+            user_id: businessAccountId,
+          },
+        });
 
        console.log(`[INSTAGRAM] API Response:`, JSON.stringify(response.data));
        

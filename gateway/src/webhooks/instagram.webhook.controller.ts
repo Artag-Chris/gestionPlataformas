@@ -1,19 +1,29 @@
-import { Controller, Post, Get, Query, Body, HttpCode, HttpStatus, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Query, Body, HttpCode, HttpStatus, Logger, Headers } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { InstagramEventRouterService } from '../instagram/services/instagram-event-router.service';
 
-interface InstagramWebhookMessage {
-  messaging: Array<{
+interface InstagramWebhookChange {
+  field: string;
+  value: {
     sender: { id: string };
     recipient: { id: string };
-    timestamp: number;
+    timestamp?: number | string;
     message?: {
       mid: string;
       text?: string;
       attachments?: Array<{ type: string; payload: any }>;
     };
-  }>;
+    delivery?: { mids: string[] };
+    read?: { watermark: number };
+  };
+}
+
+interface InstagramWebhookEntry {
+  id: string;
+  time: number;
+  changes: InstagramWebhookChange[];
 }
 
 @Controller('webhooks/instagram')
@@ -23,32 +33,49 @@ export class InstagramWebhookController {
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly eventRouter: InstagramEventRouterService,
   ) {}
 
   /**
    * Endpoint de TEST - Puedes hacer POST manualmente aquí para verificar que funciona
    * curl -X POST http://localhost:3000/api/webhooks/instagram/test \
    *   -H "Content-Type: application/json" \
-   *   -d '{"entry":[{"messaging":[{"sender":{"id":"123456"},"message":{"mid":"test","text":"Hola!"}}]}]}'
+   *   -d '{"entry":[{"id":"0","time":1775089713,"changes":[{"field":"messages","value":{"sender":{"id":"12334"},"recipient":{"id":"23245"},"timestamp":"1527459824","message":{"mid":"test","text":"Hola!"}}}]}]}'
    */
   @Post('test')
   @HttpCode(HttpStatus.OK)
-  async testWebhook(@Body() body: any): Promise<{ received: true }> {
+  async testWebhook(@Body() body: any): Promise<{ received: true; bodyKeys: string[] }> {
     console.log('\n\n🧪 TEST WEBHOOK POST RECEIVED 🧪');
-    console.log('Body:', JSON.stringify(body, null, 2));
+    console.log('Type of body:', typeof body);
+    console.log('Body is array?:', Array.isArray(body));
+    console.log('Body keys:', Object.keys(body));
+    console.log('Full body:', JSON.stringify(body, null, 2));
     
-    // Procesar como si fuera un webhook real
-    if (body.entry && Array.isArray(body.entry)) {
+    // Procesar como si fuera un webhook real (estructura Instagram: entry.changes)
+    if (body && body.entry && Array.isArray(body.entry)) {
+      console.log('✅ Found entry array with', body.entry.length, 'entries');
       for (const entry of body.entry) {
-        if (entry.messaging && Array.isArray(entry.messaging)) {
-          for (const event of entry.messaging) {
-            await this.processInstagramEvent(event);
+        if (entry.changes && Array.isArray(entry.changes)) {
+          console.log('✅ Found changes array with', entry.changes.length, 'changes');
+          for (const change of entry.changes) {
+            // Route the event
+            this.eventRouter.route(change.field, change.value, entry.time);
+            
+            // If it's a message, also track in database
+            if (change.field === 'messages' && change.value) {
+              console.log('✅ Processing messages change');
+              await this.trackMessageInDatabase(entry.time, change.value).catch((err: any) => {
+                console.error('Failed to track message:', err);
+              });
+            }
           }
         }
       }
+    } else {
+      console.log('❌ No entry array found. Body:', body);
     }
     
-    return { received: true };
+    return { received: true, bodyKeys: Object.keys(body) };
   }
 
   /**
@@ -75,6 +102,7 @@ export class InstagramWebhookController {
   /**
    * Recibir eventos de Instagram (POST)
    * Este endpoint recibe mensajes, cambios de estado, etc.
+   * Instagram usa estructura "entry.changes" no "entry.messaging"
    */
   @Post()
   @HttpCode(HttpStatus.OK)
@@ -82,15 +110,6 @@ export class InstagramWebhookController {
     @Body() body: any,
     @Query('hub.mode') mode: string,
   ): Promise<{ received: true }> {
-    // ⭐ MEGA DEBUG - Ver TODO lo que Meta nos manda
-    console.log('\n=====================================');
-    console.log('📨 [WEBHOOK POST RECEIVED]');
-    console.log('=====================================');
-    console.log('Raw body:', JSON.stringify(body, null, 2));
-    console.log('Body keys:', Object.keys(body));
-    console.log('Body type:', typeof body);
-    console.log('=====================================\n');
-
     this.logger.log(`Received webhook event: ${JSON.stringify(body)}`);
 
     // Verificar firma del webhook (seguridad)
@@ -100,114 +119,117 @@ export class InstagramWebhookController {
       return { received: true }; // Respondemos igual para no alertar a atacantes
     }
 
-    // Procesar eventos - MÁS DEBUG
-    console.log('Checking if body.entry exists:', !!body.entry);
+    // Procesar eventos
     if (body.entry && Array.isArray(body.entry)) {
-      console.log(`✅ Found ${body.entry.length} entries`);
-      for (let i = 0; i < body.entry.length; i++) {
-        const entry = body.entry[i];
-        console.log(`\n📌 Entry ${i}:`, JSON.stringify(entry, null, 2));
-        
-        if (entry.messaging && Array.isArray(entry.messaging)) {
-          console.log(`  ✅ Found ${entry.messaging.length} messaging events`);
-          for (let j = 0; j < entry.messaging.length; j++) {
-            const event = entry.messaging[j];
-            console.log(`  📬 Messaging event ${j}:`, JSON.stringify(event, null, 2));
-            await this.processInstagramEvent(event);
+      for (const entry of body.entry) {
+        // Meta puede enviar en dos formatos:
+        // 1. entry.changes[] (estructura Instagram nativa)
+        // 2. entry.messaging[] (estructura Facebook Messenger)
+
+        if (entry.changes && Array.isArray(entry.changes)) {
+          // Procesar cambios en formato Instagram nativo
+          for (const change of entry.changes) {
+            // Enrutar el evento a la queue correcta
+            this.eventRouter.route(change.field, change.value, entry.time);
+
+            // Si es un mensaje, también guardar en BD para tracking
+            if (change.field === 'messages' && change.value) {
+              await this.trackMessageInDatabase(entry.time, change.value).catch((err) => {
+                this.logger.error(`Failed to track message in database: ${err.message}`);
+              });
+            }
           }
-        } else {
-          console.log('  ❌ No messaging array found in entry');
-          console.log('  Entry keys:', Object.keys(entry));
+        } else if (entry.messaging && Array.isArray(entry.messaging)) {
+          // Procesar mensajes en formato Messenger (convertir a Instagram format)
+          for (const msg of entry.messaging) {
+            if (msg.message) {
+              // Convertir formato Messenger a Instagram format
+              const instagramFormatted = {
+                sender: msg.sender,
+                recipient: msg.recipient,
+                timestamp: entry.time,
+                message: msg.message,
+              };
+
+              // Enrutar como mensaje
+              this.eventRouter.route('messages', instagramFormatted, entry.time);
+
+              // También guardar en BD para tracking
+              await this.trackMessageInDatabase(entry.time, instagramFormatted).catch((err) => {
+                this.logger.error(`Failed to track message in database: ${err.message}`);
+              });
+            }
+          }
         }
       }
-    } else {
-      console.log('❌ No entry array found in body');
     }
 
     return { received: true };
   }
 
-  private async processInstagramEvent(event: any): Promise<void> {
+  /**
+   * Track message in database for reference (not used for routing)
+   * This is separate from event routing - purely for logging/history
+   */
+  private async trackMessageInDatabase(entryTime: number, eventValue: any): Promise<void> {
     try {
-      console.log('\n--- Processing Event ---');
-      console.log('Event object:', JSON.stringify(event, null, 2));
-      
-      const senderId = event.sender?.id;
-      const recipientId = event.recipient?.id;
-      let timestamp = event.timestamp;
+      const senderId = eventValue.sender?.id;
+      const recipientId = eventValue.recipient?.id;
+      let timestamp = eventValue.timestamp || entryTime;
 
-      console.log('Sender ID:', senderId);
-      console.log('Recipient ID:', recipientId);
-      console.log('Timestamp:', timestamp);
-      console.log('Event keys:', Object.keys(event));
-
-      // Si es un mensaje entrante
-      if (event.message) {
-        console.log('✅ This is a MESSAGE event');
-        const message = event.message;
+      // If it's an incoming message
+      if (eventValue.message) {
+        const message = eventValue.message;
         const messageId = message.mid;
         const text = message.text || '';
         const attachments = message.attachments || [];
 
-        console.log('Message ID:', messageId);
-        console.log('Message text:', text);
-        console.log('Attachments:', attachments);
-
         this.logger.log(`New message from ${senderId}: "${text}"`);
 
-        // Si no hay timestamp, usar ahora
+        // If no timestamp, use now
         if (!timestamp || timestamp === 'Invalid Date') {
           timestamp = Date.now();
         }
 
-        // Guardar el mensaje en la BD para poder obtener el IGSID
-        await this.prisma.igMessage.create({
-          data: {
-            id: senderId,
-            messageId,
-            recipient: senderId,
-            body: text,
-            mediaUrl: attachments?.[0]?.payload?.url || null,
-            status: 'SENT',
-            sentAt: new Date(timestamp * 1000), // Convertir milisegundos si es necesario
-          },
-        }).catch(err => {
-          // Si ya existe, solo actualizamos
-          if (err.code === 'P2002') {
-            return this.prisma.igMessage.update({
-              where: { messageId },
-              data: {
-                body: text,
-                mediaUrl: attachments?.[0]?.payload?.url || null,
-              },
-            });
-          }
-          throw err;
-        });
+        // Convert timestamp to milliseconds if needed
+        let timestampMs = timestamp;
+        if (typeof timestamp === 'string') {
+          timestampMs = parseInt(timestamp) * 1000;
+        } else if (typeof timestamp === 'number' && timestamp < 10000000000) {
+          // If less than this number, probably in seconds
+          timestampMs = timestamp * 1000;
+        }
 
-        // Log para debugging - mostrar el IGSID
+        // Save the message in the database for reference
+        await this.prisma.igMessage
+          .create({
+            data: {
+              messageId,
+              recipient: senderId, // The sender from Meta is the one who sent us the message
+              body: text,
+              mediaUrl: attachments?.[0]?.payload?.url || null,
+              status: 'PENDING',
+              sentAt: new Date(timestampMs),
+            },
+          })
+          .catch((err: any) => {
+            // If the messageId already exists, just update it
+            if (err.code === 'P2002') {
+              return this.prisma.igMessage.update({
+                where: { messageId },
+                data: {
+                  body: text,
+                  mediaUrl: attachments?.[0]?.payload?.url || null,
+                },
+              });
+            }
+            throw err;
+          });
+
         this.logger.log(`📲 INSTAGRAM IGSID DETECTED: ${senderId}`);
-        console.log(`\n[WEBHOOK] 📲 INSTAGRAM SENDER (IGSID): ${senderId}\n`);
-      } else {
-        console.log('❌ This is NOT a message event');
       }
-
-      // Si es una confirmación de entrega
-      if (event.delivery) {
-        console.log('✅ This is a DELIVERY event');
-        this.logger.log(`Message delivered to ${senderId}`);
-      }
-
-      // Si es una confirmación de lectura
-      if (event.read) {
-        console.log('✅ This is a READ event');
-        this.logger.log(`Message read by ${senderId}`);
-      }
-
-      console.log('--- Event processing complete ---\n');
     } catch (error) {
-      console.error('❌ ERROR processing event:', error);
-      this.logger.error(`Failed to process Instagram event: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
     }
   }
 

@@ -1,8 +1,10 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { Request, Response, NextFunction } from 'express';
+import * as express from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -24,6 +26,33 @@ async function bootstrap() {
 
   // Interceptor de logging global
   app.useGlobalInterceptors(new LoggingInterceptor());
+
+  // ⭐ MEGA DEBUG: Middleware para loguear TODOS los requests y asegurar Content-Type
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    // Si es POST/PUT sin Content-Type, asumir application/json
+    if ((req.method === 'POST' || req.method === 'PUT') && !req.get('content-type')) {
+      req.headers['content-type'] = 'application/json';
+    }
+
+    const method = req.method;
+    const path = req.path;
+    const url = req.url;
+    const timestamp = new Date().toISOString();
+
+    console.log(`\n╔════════════════════════════════════════════════════════════╗`);
+    console.log(`║ 🌐 INCOMING REQUEST - ${timestamp}`);
+    console.log(`╠════════════════════════════════════════════════════════════╣`);
+    console.log(`║ Method: ${method}`);
+    console.log(`║ Path: ${path}`);
+    console.log(`║ Full URL: ${url}`);
+    console.log(`║ Headers: ${JSON.stringify(req.headers, null, 2)}`);
+    if (method === 'POST' || method === 'PUT') {
+      console.log(`║ Body: ${JSON.stringify(req.body, null, 2)}`);
+    }
+    console.log(`╚════════════════════════════════════════════════════════════╝\n`);
+
+    next();
+  });
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
