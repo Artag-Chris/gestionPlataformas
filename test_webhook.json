@@ -1,0 +1,17 @@
+{
+  "entry": [
+    {
+      "messaging": [
+        {
+          "sender": {
+            "id": "123456789"
+          },
+          "message": {
+            "mid": "test_msg_1",
+            "text": "Hola desde el test!"
+          }
+        }
+      ]
+    }
+  ]
+}
