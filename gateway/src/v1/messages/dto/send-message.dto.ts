@@ -37,6 +37,10 @@ export class SendMessageDto {
 
   @IsOptional()
   @IsString()
+  operation?: string; // For channels like 'notion' that require operation specification
+
+  @IsOptional()
+  @IsString()
   mediaUrl?: string;
 
   @IsOptional()

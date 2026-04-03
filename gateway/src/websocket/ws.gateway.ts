@@ -30,9 +30,46 @@ export class WsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   async onModuleInit() {
     // Suscribirse a las respuestas de todos los microservicios
+    
+    // WhatsApp responses
     await this.rabbitmq.subscribe(
       QUEUES.GATEWAY_RESPONSES,
       ROUTING_KEYS.WHATSAPP_RESPONSE,
+      (payload) => this.handleServiceResponse(payload),
+    );
+
+    // Notion responses
+    await this.rabbitmq.subscribe(
+      QUEUES.GATEWAY_RESPONSES,
+      ROUTING_KEYS.NOTION_RESPONSE,
+      (payload) => this.handleServiceResponse(payload),
+    );
+
+    // Instagram responses
+    await this.rabbitmq.subscribe(
+      QUEUES.GATEWAY_RESPONSES,
+      ROUTING_KEYS.INSTAGRAM_RESPONSE,
+      (payload) => this.handleServiceResponse(payload),
+    );
+
+    // Slack responses
+    await this.rabbitmq.subscribe(
+      QUEUES.GATEWAY_RESPONSES,
+      ROUTING_KEYS.SLACK_RESPONSE,
+      (payload) => this.handleServiceResponse(payload),
+    );
+
+    // TikTok responses
+    await this.rabbitmq.subscribe(
+      QUEUES.GATEWAY_RESPONSES,
+      ROUTING_KEYS.TIKTOK_RESPONSE,
+      (payload) => this.handleServiceResponse(payload),
+    );
+
+    // Facebook responses
+    await this.rabbitmq.subscribe(
+      QUEUES.GATEWAY_RESPONSES,
+      ROUTING_KEYS.FACEBOOK_RESPONSE,
       (payload) => this.handleServiceResponse(payload),
     );
   }

@@ -48,13 +48,20 @@ export class MessagesService {
     });
 
     // Publicar al exchange → microservicio correspondiente
-    this.rabbitmq.publish(routingKey, {
+    const payload: Record<string, unknown> = {
       messageId: message.id,
       recipients: dto.recipients,
       message: dto.message,
       mediaUrl: dto.mediaUrl ?? null,
       metadata: dto.metadata ?? {},
-    });
+    };
+
+    // Para canales como Notion, incluir la operación
+    if (dto.operation) {
+      payload.operation = dto.operation;
+    }
+
+    this.rabbitmq.publish(routingKey, payload);
 
     this.logger.log(
       `Message ${message.id} queued → channel [${dto.channel}] | recipients: ${dto.recipients.length}`,

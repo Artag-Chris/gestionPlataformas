@@ -107,8 +107,27 @@ export class NotionService {
 
   /**
    * create_page: creates a new Notion page under a parent page.
-   * Required metadata: parent_page_id
-   * Optional metadata: title, icon
+   *
+   * REQUIRED metadata:
+   *   - parent_page_id: Notion page ID where the new page will be created
+   *
+   * OPTIONAL metadata:
+   *   - title: overrides the `message` field as the page title
+   *   - icon: emoji character (e.g. "🚀", "🎉", "📝", "💡")
+   *          Notion validates emojis server-side. If an invalid emoji is provided,
+   *          the operation will fail with an error. Only standard Unicode emoji
+   *          characters are supported. If no icon is provided, Notion will use its default.
+   *
+   * Icon Support in Notion API:
+   *   The Notion API supports 5 types of icons for pages:
+   *   1. "emoji" (CURRENTLY SUPPORTED) - any Unicode emoji character
+   *   2. "custom_emoji" - workspace-specific custom emojis (future support)
+   *   3. "icon" - native Notion icons with color (e.g. "pizza", "meeting") (future support)
+   *   4. "external" - external image URL (future support)
+   *   5. "file_upload" - uploaded file (future support)
+   *
+   *   Currently we only support emoji icons. Additional icon types can be implemented
+   *   by modifying the payload construction logic and updating the metadata schema.
    */
   private async createPage(dto: SendNotionDto): Promise<string> {
     const meta = dto.metadata ?? {};
@@ -119,11 +138,12 @@ export class NotionService {
     }
 
     const title = (meta['title'] as string | undefined) ?? dto.message;
-    const icon = (meta['icon'] as string | undefined) ?? '📄';
+    const icon = meta['icon'] as string | undefined;
 
-    const response = await this.notion.pages.create({
+    // Build the request payload dynamically
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const createPayload: any = {
       parent: { page_id: parentPageId },
-      icon: { type: 'emoji', emoji: icon as never },
       properties: {
         title: {
           title: [{ type: 'text', text: { content: title } }],
@@ -138,7 +158,14 @@ export class NotionService {
           },
         },
       ],
-    });
+    };
+
+    // Only include icon if user provided one
+    if (icon) {
+      createPayload.icon = { type: 'emoji', emoji: icon as never };
+    }
+
+    const response = await this.notion.pages.create(createPayload);
 
     return response.id;
   }
