@@ -8,8 +8,10 @@ import { NotionEventRouterService } from '../notion/services/notion-event-router
  * Flujo:
  * 1. GET /api/webhooks/notion - Verificación inicial (handshake)
  * 2. POST /api/webhooks/notion - Recibir eventos
+ * 
+ * NOTA: El prefijo 'api' es añadido automáticamente por el global prefix en main.ts
  */
-@Controller('api/webhooks/notion')
+@Controller('webhooks/notion')
 export class NotionWebhookController {
   private readonly logger = new Logger(NotionWebhookController.name);
 
