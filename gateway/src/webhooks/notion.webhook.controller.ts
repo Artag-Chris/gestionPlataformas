@@ -45,7 +45,11 @@ export class NotionWebhookController {
   /**
    * Endpoint para recibir eventos de Notion (POST)
    * 
-   * Notion envía eventos en formato:
+   * Notion envía dos tipos de mensajes POST:
+   * 1. Handshake/Verificación: { verification_token: "secret_..." }
+   * 2. Eventos reales: { id, type, timestamp, ... }
+   * 
+   * Estructura de evento:
    * {
    *   id: string,
    *   timestamp: ISO8601,
@@ -68,6 +72,15 @@ export class NotionWebhookController {
     try {
       // Notion envía un objeto con la estructura completa del evento
       if (body && typeof body === 'object') {
+        // ⭐ HANDSHAKE ESPECIAL: Si tiene verification_token, es la verificación inicial
+        if (body.verification_token) {
+          this.logger.log(`🔐 NOTION WEBHOOK VERIFICATION RECEIVED`);
+          this.logger.log(`Verification token: ${body.verification_token}`);
+          this.logger.log(`✅ Save this token to .env as: NOTION_WEBHOOK_VERIFICATION_TOKEN=${body.verification_token}`);
+          return { received: true };
+        }
+
+        // EVENTO NORMAL: Procesar el evento
         const eventType = body.type;
         
         if (!eventType) {
