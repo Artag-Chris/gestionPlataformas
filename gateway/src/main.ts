@@ -12,6 +12,10 @@ async function bootstrap() {
   // Prefijo global de API
   app.setGlobalPrefix('api');
 
+  // ⭐ Configurar parsers JSON ANTES de otros middlewares
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
   // Validación automática de DTOs en todos los endpoints
   app.useGlobalPipes(
     new ValidationPipe({
@@ -27,13 +31,8 @@ async function bootstrap() {
   // Interceptor de logging global
   app.useGlobalInterceptors(new LoggingInterceptor());
 
-  // ⭐ MEGA DEBUG: Middleware para loguear TODOS los requests y asegurar Content-Type
+  // ⭐ MEGA DEBUG: Middleware para loguear TODOS los requests DESPUÉS de parsing
   app.use((req: Request, res: Response, next: NextFunction) => {
-    // Si es POST/PUT sin Content-Type, asumir application/json
-    if ((req.method === 'POST' || req.method === 'PUT') && !req.get('content-type')) {
-      req.headers['content-type'] = 'application/json';
-    }
-
     const method = req.method;
     const path = req.path;
     const url = req.url;
