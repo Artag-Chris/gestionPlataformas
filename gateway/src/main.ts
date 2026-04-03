@@ -12,24 +12,27 @@ async function bootstrap() {
   // Prefijo global de API
   app.setGlobalPrefix('api');
 
-  // ⭐ Capturar raw body ANTES de JSON parser (para validación de firmas Slack)
-  app.use(express.raw({ type: 'application/json', limit: '10mb' }));
+  // ⭐ OPCIÓN 1: Middleware para capturar raw body usando express.raw()
+  // Este middleware SOLO para la ruta /api/webhooks/slack
+  app.use('/api/webhooks/slack', express.raw({ type: 'application/json', limit: '10mb' }));
 
-  // ⭐ Configurar parsers JSON ANTES de otros middlewares
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ limit: '10mb', extended: true }));
-
-  // ⭐ Middleware para guardar raw body para validación de firmas
+  // ⭐ Middleware que guarda el raw body ANTES de que express.json() lo parsee
   app.use((req: Request, res: Response, next: NextFunction) => {
+    // Si el body es un Buffer (de express.raw), guardarlo como string
     if (Buffer.isBuffer(req.body)) {
       (req as any).rawBody = req.body.toString('utf-8');
+      // Importante: resetear body para que express.json() lo parsee
+      (req as any)._body = false;
     } else if (typeof req.body === 'string') {
       (req as any).rawBody = req.body;
-    } else if (typeof req.body === 'object' && req.body) {
-      (req as any).rawBody = JSON.stringify(req.body);
+      (req as any)._body = false;
     }
     next();
   });
+
+  // ⭐ Configurar parsers JSON DESPUÉS del middleware de raw body
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // Validación automática de DTOs en todos los endpoints
   app.useGlobalPipes(
@@ -46,7 +49,7 @@ async function bootstrap() {
   // Interceptor de logging global
   app.useGlobalInterceptors(new LoggingInterceptor());
 
-  // ⭐ MEGA DEBUG: Middleware para loguear TODOS los requests DESPUÉS de parsing
+  // ⭐ DEBUG: Middleware para loguear TODOS los requests DESPUÉS de parsing
   app.use((req: Request, res: Response, next: NextFunction) => {
     const method = req.method;
     const path = req.path;
@@ -62,6 +65,9 @@ async function bootstrap() {
     console.log(`║ Headers: ${JSON.stringify(req.headers, null, 2)}`);
     if (method === 'POST' || method === 'PUT') {
       console.log(`║ Body: ${JSON.stringify(req.body, null, 2)}`);
+      if ((req as any).rawBody) {
+        console.log(`║ Raw Body (first 100 chars): ${(req as any).rawBody.substring(0, 100)}`);
+      }
     }
     console.log(`╚════════════════════════════════════════════════════════════╝\n`);
 

@@ -75,11 +75,19 @@ export class SlackWebhookController {
     @Req() request: Request,
   ): Promise<Record<string, unknown>> {
     try {
+      // Debug log
+      this.logger.debug(`=== SLACK WEBHOOK DEBUG ===`);
+      this.logger.debug(`Body type: ${typeof body}`);
+      this.logger.debug(`Body keys: ${body ? Object.keys(body).join(', ') : 'null'}`);
+      this.logger.debug(`Body.type: ${body['type']}`);
+      this.logger.debug(`Body.challenge: ${body['challenge']}`);
+
       // Validate signature if signing secret is configured
       if (this.signingSecret) {
         // Get raw body from request body buffer stored by middleware
         const rawBody =
           (request as any).rawBody || JSON.stringify(body);
+        this.logger.debug(`Raw body length: ${rawBody ? rawBody.length : 0}`);
         this.validateSignature(signature, timestamp, rawBody);
       }
 
@@ -88,8 +96,12 @@ export class SlackWebhookController {
 
       // Handle URL verification challenge
       if (body['type'] === 'url_verification') {
-        this.logger.log('✓ Slack URL verification challenge');
-        return { challenge: body['challenge'] };
+        const challenge = body['challenge'] as string;
+        this.logger.log(
+          `✓ Slack URL verification challenge | challenge: ${challenge}`,
+        );
+        // IMPORTANT: Return the challenge value exactly as received
+        return { challenge };
       }
 
       // Handle event callback
