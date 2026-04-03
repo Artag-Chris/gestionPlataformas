@@ -12,9 +12,24 @@ async function bootstrap() {
   // Prefijo global de API
   app.setGlobalPrefix('api');
 
+  // ⭐ Capturar raw body ANTES de JSON parser (para validación de firmas Slack)
+  app.use(express.raw({ type: 'application/json', limit: '10mb' }));
+
   // ⭐ Configurar parsers JSON ANTES de otros middlewares
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+  // ⭐ Middleware para guardar raw body para validación de firmas
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (Buffer.isBuffer(req.body)) {
+      (req as any).rawBody = req.body.toString('utf-8');
+    } else if (typeof req.body === 'string') {
+      (req as any).rawBody = req.body;
+    } else if (typeof req.body === 'object' && req.body) {
+      (req as any).rawBody = JSON.stringify(req.body);
+    }
+    next();
+  });
 
   // Validación automática de DTOs en todos los endpoints
   app.useGlobalPipes(
