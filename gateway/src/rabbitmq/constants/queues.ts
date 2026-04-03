@@ -31,11 +31,38 @@ export const ROUTING_KEYS = {
   INSTAGRAM_OPTIN_RECEIVED: 'channels.instagram.events.optin',
   INSTAGRAM_HANDOVER_RECEIVED: 'channels.instagram.events.handover',
 
-  SLACK_SEND: 'channels.slack.send',
-  SLACK_RESPONSE: 'channels.slack.response',
+   SLACK_SEND: 'channels.slack.send',
+   SLACK_RESPONSE: 'channels.slack.response',
 
-  NOTION_SEND: 'channels.notion.send',
-  NOTION_RESPONSE: 'channels.notion.response',
+   NOTION_SEND: 'channels.notion.send',
+   NOTION_RESPONSE: 'channels.notion.response',
+
+   // Notion Events - Incoming events from webhooks (18 types)
+   // Page Events (8)
+   NOTION_PAGE_CREATED: 'channels.notion.events.page_created',
+   NOTION_PAGE_CONTENT_UPDATED: 'channels.notion.events.page_content_updated',
+   NOTION_PAGE_PROPERTIES_UPDATED: 'channels.notion.events.page_properties_updated',
+   NOTION_PAGE_MOVED: 'channels.notion.events.page_moved',
+   NOTION_PAGE_DELETED: 'channels.notion.events.page_deleted',
+   NOTION_PAGE_UNDELETED: 'channels.notion.events.page_undeleted',
+   NOTION_PAGE_LOCKED: 'channels.notion.events.page_locked',
+   NOTION_PAGE_UNLOCKED: 'channels.notion.events.page_unlocked',
+
+   // Database Events (1 - keep for backward compatibility)
+   NOTION_DATABASE_CREATED: 'channels.notion.events.database_created',
+
+   // Data Source Events (6 - NEW in 2025-09-03)
+   NOTION_DATA_SOURCE_CREATED: 'channels.notion.events.data_source_created',
+   NOTION_DATA_SOURCE_CONTENT_UPDATED: 'channels.notion.events.data_source_content_updated',
+   NOTION_DATA_SOURCE_MOVED: 'channels.notion.events.data_source_moved',
+   NOTION_DATA_SOURCE_DELETED: 'channels.notion.events.data_source_deleted',
+   NOTION_DATA_SOURCE_UNDELETED: 'channels.notion.events.data_source_undeleted',
+   NOTION_DATA_SOURCE_SCHEMA_UPDATED: 'channels.notion.events.data_source_schema_updated',
+
+   // Comment Events (3)
+   NOTION_COMMENT_CREATED: 'channels.notion.events.comment_created',
+   NOTION_COMMENT_UPDATED: 'channels.notion.events.comment_updated',
+   NOTION_COMMENT_DELETED: 'channels.notion.events.comment_deleted',
 
   TIKTOK_SEND: 'channels.tiktok.send',
   TIKTOK_RESPONSE: 'channels.tiktok.response',
@@ -56,22 +83,49 @@ export const QUEUES = {
   WHATSAPP_EVENTS_TEMPLATE_UPDATE: 'whatsapp.events.template_update',
   WHATSAPP_EVENTS_ALERTS: 'whatsapp.events.alerts',
 
-  SLACK_SEND: 'slack.send',
-  NOTION_SEND: 'notion.send',
-  INSTAGRAM_SEND: 'instagram.send',
-  TIKTOK_SEND: 'tiktok.send',
-  FACEBOOK_SEND: 'facebook.send',
-  
-  // Instagram Events Queues
-  INSTAGRAM_EVENTS_MESSAGE: 'instagram.events.message',
-  INSTAGRAM_EVENTS_COMMENT: 'instagram.events.comment',
-  INSTAGRAM_EVENTS_REACTION: 'instagram.events.reaction',
-  INSTAGRAM_EVENTS_SEEN: 'instagram.events.seen',
-  INSTAGRAM_EVENTS_REFERRAL: 'instagram.events.referral',
-  INSTAGRAM_EVENTS_OPTIN: 'instagram.events.optin',
-  INSTAGRAM_EVENTS_HANDOVER: 'instagram.events.handover',
-  
-  GATEWAY_RESPONSES: 'gateway.responses',
+   SLACK_SEND: 'slack.send',
+   NOTION_SEND: 'notion.send',
+   INSTAGRAM_SEND: 'instagram.send',
+   TIKTOK_SEND: 'tiktok.send',
+   FACEBOOK_SEND: 'facebook.send',
+   
+   // Instagram Events Queues
+   INSTAGRAM_EVENTS_MESSAGE: 'instagram.events.message',
+   INSTAGRAM_EVENTS_COMMENT: 'instagram.events.comment',
+   INSTAGRAM_EVENTS_REACTION: 'instagram.events.reaction',
+   INSTAGRAM_EVENTS_SEEN: 'instagram.events.seen',
+   INSTAGRAM_EVENTS_REFERRAL: 'instagram.events.referral',
+   INSTAGRAM_EVENTS_OPTIN: 'instagram.events.optin',
+   INSTAGRAM_EVENTS_HANDOVER: 'instagram.events.handover',
+
+   // Notion Events Queues (18 types)
+   // Page Events (8)
+   NOTION_EVENTS_PAGE_CREATED: 'notion.events.page_created',
+   NOTION_EVENTS_PAGE_CONTENT_UPDATED: 'notion.events.page_content_updated',
+   NOTION_EVENTS_PAGE_PROPERTIES_UPDATED: 'notion.events.page_properties_updated',
+   NOTION_EVENTS_PAGE_MOVED: 'notion.events.page_moved',
+   NOTION_EVENTS_PAGE_DELETED: 'notion.events.page_deleted',
+   NOTION_EVENTS_PAGE_UNDELETED: 'notion.events.page_undeleted',
+   NOTION_EVENTS_PAGE_LOCKED: 'notion.events.page_locked',
+   NOTION_EVENTS_PAGE_UNLOCKED: 'notion.events.page_unlocked',
+
+   // Database Events (1)
+   NOTION_EVENTS_DATABASE_CREATED: 'notion.events.database_created',
+
+   // Data Source Events (6)
+   NOTION_EVENTS_DATA_SOURCE_CREATED: 'notion.events.data_source_created',
+   NOTION_EVENTS_DATA_SOURCE_CONTENT_UPDATED: 'notion.events.data_source_content_updated',
+   NOTION_EVENTS_DATA_SOURCE_MOVED: 'notion.events.data_source_moved',
+   NOTION_EVENTS_DATA_SOURCE_DELETED: 'notion.events.data_source_deleted',
+   NOTION_EVENTS_DATA_SOURCE_UNDELETED: 'notion.events.data_source_undeleted',
+   NOTION_EVENTS_DATA_SOURCE_SCHEMA_UPDATED: 'notion.events.data_source_schema_updated',
+
+   // Comment Events (3)
+   NOTION_EVENTS_COMMENT_CREATED: 'notion.events.comment_created',
+   NOTION_EVENTS_COMMENT_UPDATED: 'notion.events.comment_updated',
+   NOTION_EVENTS_COMMENT_DELETED: 'notion.events.comment_deleted',
+   
+   GATEWAY_RESPONSES: 'gateway.responses',
 } as const;
 
 // Tipo helper para inferir los valores del objeto
