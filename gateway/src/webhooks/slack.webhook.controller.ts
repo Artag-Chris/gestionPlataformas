@@ -12,6 +12,7 @@ import {
 import { Request } from 'express';
 import * as crypto from 'crypto';
 import { SlackEventRouterService } from '../slack/services/slack-event-router.service';
+import { getSlackEventType } from '../slack/utils/event-type.helper';
 
 /**
  * Slack Webhook Controller
@@ -107,10 +108,13 @@ export class SlackWebhookController {
       // Handle event callback
       if (body['type'] === 'event_callback') {
         const event = body['event'] as Record<string, unknown>;
-        const eventType = event['type'] as string;
+        const baseEventType = event['type'] as string;
+        
+        // Determine the correct event type (normalize message subtypes based on channel ID)
+        const eventType = getSlackEventType(event);
 
         this.logger.log(
-          `Processing event [${eventType}] | event_id: ${body['event_id']}`,
+          `Processing event [${eventType}] (base: ${baseEventType}) | event_id: ${body['event_id']}`,
         );
 
         // Route event asynchronously (don't wait for result)
