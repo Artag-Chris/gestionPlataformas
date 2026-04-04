@@ -12,26 +12,27 @@ async function bootstrap() {
   // Prefijo global de API
   app.setGlobalPrefix('api');
 
-  // ⭐ OPCIÓN 1: Middleware para capturar raw body usando express.raw()
-  // Este middleware SOLO para la ruta /api/webhooks/slack
-  app.use('/api/webhooks/slack', express.raw({ type: 'application/json', limit: '10mb' }));
-
-  // ⭐ Middleware que guarda el raw body ANTES de que express.json() lo parsee
+  // ⭐ Middleware que captura el raw body ANTES de parsing
+  // Usa express.text() para obtener el body como string
   app.use((req: Request, res: Response, next: NextFunction) => {
-    // Si el body es un Buffer (de express.raw), guardarlo como string
-    if (Buffer.isBuffer(req.body)) {
-      (req as any).rawBody = req.body.toString('utf-8');
-      // Importante: resetear body para que express.json() lo parsee
-      (req as any)._body = false;
-    } else if (typeof req.body === 'string') {
-      (req as any).rawBody = req.body;
-      (req as any)._body = false;
-    }
-    next();
+    express.text({ limit: '10mb', type: '*/*' })(req, res, () => {
+      // En este punto, req.body es texto crudo o undefined
+      const rawBody = (req.body as string) || '';
+      
+      // Guardar raw body para webhook signature validation
+      (req as any).rawBody = rawBody;
+      
+      // Parsear JSON y poner el resultado en req.body
+      try {
+        (req as any).body = rawBody ? JSON.parse(rawBody) : {};
+      } catch (e) {
+        (req as any).body = {};
+      }
+      
+      next();
+    });
   });
-
-  // ⭐ Configurar parsers JSON DESPUÉS del middleware de raw body
-  app.use(express.json({ limit: '10mb' }));
+  
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // Validación automática de DTOs en todos los endpoints
@@ -65,8 +66,9 @@ async function bootstrap() {
     console.log(`║ Headers: ${JSON.stringify(req.headers, null, 2)}`);
     if (method === 'POST' || method === 'PUT') {
       console.log(`║ Body: ${JSON.stringify(req.body, null, 2)}`);
-      if ((req as any).rawBody) {
-        console.log(`║ Raw Body (first 100 chars): ${(req as any).rawBody.substring(0, 100)}`);
+      const rawBody = (req as any).rawBody;
+      if (rawBody && typeof rawBody === 'string') {
+        console.log(`║ Raw Body (first 100 chars): ${rawBody.substring(0, 100)}`);
       }
     }
     console.log(`╚════════════════════════════════════════════════════════════╝\n`);
