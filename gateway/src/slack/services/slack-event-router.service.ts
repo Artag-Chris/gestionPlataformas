@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { RabbitMQService } from '../../rabbitmq/rabbitmq.service';
-import { SLACK_EVENT_TYPES, EVENT_TYPE_MAP } from '../constants/events';
+import { SLACK_EVENT_TYPES } from '../constants/events';
+import { ROUTING_KEYS, RABBITMQ_EXCHANGE } from '../../rabbitmq/constants/queues';
 
 /**
  * SlackEventRouterService
@@ -11,6 +12,34 @@ import { SLACK_EVENT_TYPES, EVENT_TYPE_MAP } from '../constants/events';
 @Injectable()
 export class SlackEventRouterService {
   private readonly logger = new Logger(SlackEventRouterService.name);
+
+  // Maps normalized Slack event types to centralized ROUTING_KEYS
+  private readonly eventTypeToRoutingKey: Record<SLACK_EVENT_TYPES, string> = {
+    // Message Events
+    [SLACK_EVENT_TYPES.MESSAGE_CHANNELS]: ROUTING_KEYS.SLACK_MESSAGE_CHANNELS,
+    [SLACK_EVENT_TYPES.MESSAGE_GROUPS]: ROUTING_KEYS.SLACK_MESSAGE_GROUPS,
+    [SLACK_EVENT_TYPES.MESSAGE_IM]: ROUTING_KEYS.SLACK_MESSAGE_IM,
+    [SLACK_EVENT_TYPES.MESSAGE_MPIM]: ROUTING_KEYS.SLACK_MESSAGE_MPIM,
+    [SLACK_EVENT_TYPES.APP_MENTION]: ROUTING_KEYS.SLACK_APP_MENTION,
+
+    // Channel Events
+    [SLACK_EVENT_TYPES.CHANNEL_CREATED]: ROUTING_KEYS.SLACK_CHANNEL_CREATED,
+    [SLACK_EVENT_TYPES.CHANNEL_DELETED]: ROUTING_KEYS.SLACK_CHANNEL_DELETED,
+    [SLACK_EVENT_TYPES.CHANNEL_RENAMED]: ROUTING_KEYS.SLACK_CHANNEL_RENAMED,
+    [SLACK_EVENT_TYPES.MEMBER_JOINED_CHANNEL]: ROUTING_KEYS.SLACK_MEMBER_JOINED_CHANNEL,
+
+    // Reaction Events
+    [SLACK_EVENT_TYPES.REACTION_ADDED]: ROUTING_KEYS.SLACK_REACTION_ADDED,
+    [SLACK_EVENT_TYPES.REACTION_REMOVED]: ROUTING_KEYS.SLACK_REACTION_REMOVED,
+
+    // User Events
+    [SLACK_EVENT_TYPES.USER_CHANGE]: ROUTING_KEYS.SLACK_USER_CHANGE,
+    [SLACK_EVENT_TYPES.TEAM_JOIN]: ROUTING_KEYS.SLACK_TEAM_JOIN,
+
+    // File Events
+    [SLACK_EVENT_TYPES.FILE_CREATED]: ROUTING_KEYS.SLACK_FILE_CREATED,
+    [SLACK_EVENT_TYPES.FILE_DELETED]: ROUTING_KEYS.SLACK_FILE_DELETED,
+  };
 
   constructor(private readonly rabbitmq: RabbitMQService) {}
 
@@ -35,7 +64,7 @@ export class SlackEventRouterService {
         return;
       }
 
-      const routingKey = EVENT_TYPE_MAP[eventType as SLACK_EVENT_TYPES];
+      const routingKey = this.eventTypeToRoutingKey[eventType as SLACK_EVENT_TYPES];
 
       // Publish to RabbitMQ with routing key
       this.rabbitmq.publish(routingKey, {

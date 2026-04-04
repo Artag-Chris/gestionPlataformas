@@ -242,11 +242,46 @@ export class SlackService {
   }
 
   /**
-   * Post a message to a channel in a thread
+   * Log an event to the Message table for audit trail
+   * Used by event handlers to record webhook events
    * 
-   * @param channelId - Slack channel ID
-   * @param text - Message text
-   * @param threadTs - Parent message timestamp
+   * @param eventType - Type of event
+   * @param channel - Channel/user ID
+   * @param body - Event description or message content
+   * @param metadata - Full event payload for audit
+   */
+  async logEventToMessages(
+    eventType: string,
+    channel: string,
+    body: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.prisma.message.create({
+        data: {
+          id: uuidv4(),
+          channel,
+          recipients: [channel], // Single channel as recipient
+          body: `[${eventType}] ${body}`,
+          metadata: metadata ? JSON.parse(JSON.stringify(metadata)) : null,
+          status: 'SENT',
+        },
+      });
+
+      this.logger.debug(`Logged event [${eventType}] to Message table`);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to log event to Message table: ${reason}`);
+      // Don't throw - logging failure shouldn't break event processing
+    }
+  }
+
+  /**
+   * Post a reply to a Slack thread
+   * 
+   * @param channelId - Channel ID where the thread exists
+   * @param text - Reply text
+   * @param threadTs - Timestamp of the parent message
    * @param replyBroadcast - Whether to also post in channel
    */
   async postThreadReply(
@@ -277,5 +312,6 @@ export class SlackService {
       this.logger.error(`Failed to post thread reply: ${reason}`);
       throw new BadRequestException(`Failed to post thread reply: ${reason}`);
     }
-  }
+   }
 }
+

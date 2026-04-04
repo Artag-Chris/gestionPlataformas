@@ -104,11 +104,20 @@ export class SlackEventHandlerService {
       `📨 Channel message | Channel: ${channel} | User: ${userId} | TS: ${ts}`,
     );
 
-    // Business logic: Could trigger workflows, log to database, forward to webhooks, etc.
-    // Example: If message contains specific trigger words, auto-respond
+    // Log event to Message table
+    await this.slack.logEventToMessages(
+      'message.channels',
+      channel,
+      `Message from ${userId}: "${text}"`,
+      event,
+    ).catch((err) => {
+      this.logger.error(`Failed to log event: ${err.message}`);
+    });
+
+    // Test response: Send test message to thread
     if (text?.includes('@bot-action')) {
       await this.slack
-        .postThreadReply(channel, '✅ Action acknowledged in thread', ts, false)
+        .postThreadReply(channel, '✅ Test: Action acknowledged in thread', ts, false)
         .catch((err) => {
           this.logger.error(`Failed to post thread reply: ${err.message}`);
         });
@@ -125,8 +134,17 @@ export class SlackEventHandlerService {
       `🔒 Private channel message | Channel: ${channel} | User: ${userId} | TS: ${ts}`,
     );
 
-    // Business logic: Log private group messages, trigger group-specific workflows
-    // Example: Monitor for sensitive data mentions
+    // Log event to Message table
+    await this.slack.logEventToMessages(
+      'message.groups',
+      channel,
+      `Private message from ${userId}: "${text}"`,
+      event,
+    ).catch((err) => {
+      this.logger.error(`Failed to log event: ${err.message}`);
+    });
+
+    // Test: Monitor for sensitive data mentions
     if (text?.match(/(password|secret|key)/i)) {
       this.logger.warn(
         `⚠️ Potentially sensitive data in private channel ${channel}`,
@@ -144,13 +162,22 @@ export class SlackEventHandlerService {
       `💬 Direct message from ${userId} | Channel: ${channel} | TS: ${ts}`,
     );
 
-    // Business logic: Handle DM conversations, support tickets, etc.
-    // Example: Auto-acknowledge DMs
+    // Log event to Message table
+    await this.slack.logEventToMessages(
+      'message.im',
+      channel,
+      `DM from ${userId}: "${text}"`,
+      event,
+    ).catch((err) => {
+      this.logger.error(`Failed to log event: ${err.message}`);
+    });
+
+    // Test response: Auto-acknowledge DMs
     await this.slack
       .sendToRecipients({
         messageId: `dm-ack-${ts}`,
         recipients: [userId],
-        message: `👋 Got your message: "${text}". Processing...`,
+        message: `✅ Test: Got your message: "${text}". Processing...`,
       })
       .catch((err) => {
         this.logger.error(`Failed to send DM response: ${err.message}`);
@@ -167,8 +194,18 @@ export class SlackEventHandlerService {
       `👥 Multi-user DM | Channel: ${channel} | User: ${userId} | TS: ${ts}`,
     );
 
-    // Business logic: Handle group DM conversations
-    // Could track group conversations, trigger group notifications
+    // Log event to Message table
+    await this.slack.logEventToMessages(
+      'message.mpim',
+      channel,
+      `Multi-user DM from ${userId}: "${text}"`,
+      event,
+    ).catch((err) => {
+      this.logger.error(`Failed to log event: ${err.message}`);
+    });
+
+    // Test: Could track group conversations
+    this.logger.debug(`✅ Test: Logged multi-user DM event`);
   }
 
   private async handleAppMention(event: Record<string, unknown>): Promise<void> {
@@ -179,13 +216,22 @@ export class SlackEventHandlerService {
 
     this.logger.log(`🤖 App mentioned by ${userId} in ${channel} | Message: "${text}"`);
 
-    // Business logic: Handle app mentions, respond to questions, execute commands
-    // Example: Simple command parsing
+    // Log event to Message table
+    await this.slack.logEventToMessages(
+      'app_mention',
+      channel,
+      `App mentioned by ${userId}: "${text}"`,
+      event,
+    ).catch((err) => {
+      this.logger.error(`Failed to log event: ${err.message}`);
+    });
+
+    // Test response: Handle app mentions with test reply
     if (text?.includes('help')) {
       await this.slack
         .postThreadReply(
           channel,
-          '📖 **Available commands:**\n• `help` - Show this message\n• `status` - Check system status\n• `logs` - View recent logs',
+          '✅ Test: **Available commands:**\n• `help` - Show this message\n• `status` - Check system status\n• `logs` - View recent logs',
           ts,
           false,
         )
@@ -196,12 +242,24 @@ export class SlackEventHandlerService {
       await this.slack
         .postThreadReply(
           channel,
-          '✅ System is operational and all services are running normally.',
+          '✅ Test: System is operational and all services are running normally.',
           ts,
           false,
         )
         .catch((err) => {
           this.logger.error(`Failed to post status: ${err.message}`);
+        });
+    } else {
+      // Default test response for any mention
+      await this.slack
+        .postThreadReply(
+          channel,
+          '✅ Test: Bot received your mention and is processing.',
+          ts,
+          false,
+        )
+        .catch((err) => {
+          this.logger.error(`Failed to post default response: ${err.message}`);
         });
     }
   }
@@ -219,13 +277,22 @@ export class SlackEventHandlerService {
       `✨ New channel created | Name: #${channelName} | ID: ${channelId} | Creator: ${creator}`,
     );
 
-    // Business logic: Register new channels, trigger onboarding, etc.
-    // Example: Send welcome message to new channel
+    // Log event to Message table
+    await this.slack.logEventToMessages(
+      'channel_created',
+      channelId,
+      `New channel created: #${channelName} by ${creator}`,
+      event,
+    ).catch((err) => {
+      this.logger.error(`Failed to log event: ${err.message}`);
+    });
+
+    // Test response: Send welcome message to new channel
     await this.slack
       .sendToRecipients({
         messageId: `channel-welcome-${channelId}`,
         recipients: [channelId],
-        message: `👋 Welcome to #${channelName}! This channel was created on <t:${created}:F>. Feel free to set a channel topic and description.`,
+        message: `✅ Test: Welcome to #${channelName}! This channel was created on <t:${created}:F>. Feel free to set a channel topic and description.`,
       })
       .catch((err) => {
         this.logger.error(`Failed to send welcome message: ${err.message}`);
@@ -237,8 +304,18 @@ export class SlackEventHandlerService {
 
     this.logger.log(`🗑️ Channel deleted | Channel: ${channelId}`);
 
-    // Business logic: Clean up channel resources, update databases, notify admins
-    // Example: Could log archival, notify related services
+    // Log event to Message table
+    await this.slack.logEventToMessages(
+      'channel_deleted',
+      channelId,
+      `Channel deleted: ${channelId}`,
+      event,
+    ).catch((err) => {
+      this.logger.error(`Failed to log event: ${err.message}`);
+    });
+
+    // Test: Log channel deletion (can't send message to deleted channel)
+    this.logger.debug(`✅ Test: Logged channel deletion event`);
   }
 
   private async handleChannelRenamed(event: Record<string, unknown>): Promise<void> {
@@ -250,8 +327,18 @@ export class SlackEventHandlerService {
       `📝 Channel renamed | #${oldName} → #${newName}`,
     );
 
-    // Business logic: Update internal references, notify users, etc.
-    // Example: Could update documentation or channel directories
+    // Log event to Message table
+    await this.slack.logEventToMessages(
+      'channel_renamed',
+      channel['id'] as string,
+      `Channel renamed: #${oldName} → #${newName}`,
+      event,
+    ).catch((err) => {
+      this.logger.error(`Failed to log event: ${err.message}`);
+    });
+
+    // Test: Log rename event
+    this.logger.debug(`✅ Test: Logged channel rename event`);
   }
 
   private async handleMemberJoinedChannel(
@@ -265,12 +352,21 @@ export class SlackEventHandlerService {
       `👤 User joined channel | User: ${userId} | Channel: ${channelId} | Invited by: ${inviter}`,
     );
 
-    // Business logic: Welcome new members, assign roles, grant access
-    // Example: Send personalized welcome
+    // Log event to Message table
+    await this.slack.logEventToMessages(
+      'member_joined_channel',
+      channelId,
+      `User ${userId} joined (invited by ${inviter})`,
+      event,
+    ).catch((err) => {
+      this.logger.error(`Failed to log event: ${err.message}`);
+    });
+
+    // Test response: Send personalized welcome
     const welcomeMsg =
       inviter && inviter !== 'U0000000000'
-        ? `👋 Welcome to the channel <@${userId}>! You were added by <@${inviter}>.`
-        : `👋 Welcome to the channel <@${userId}>!`;
+        ? `✅ Test: Welcome to the channel <@${userId}>! You were added by <@${inviter}>.`
+        : `✅ Test: Welcome to the channel <@${userId}>!`;
 
     await this.slack
       .postThreadReply(channelId, welcomeMsg, '', false)
@@ -292,12 +388,21 @@ export class SlackEventHandlerService {
       `❤️ Reaction added | Emoji: :${emoji}: | User: ${userId} | Message: ${itemTs}`,
     );
 
-    // Business logic: Track sentiment, count votes, trigger automation
-    // Example: Aggregate reactions for analytics
+    // Log event to Message table
+    await this.slack.logEventToMessages(
+      'reaction_added',
+      channel || 'unknown',
+      `Reaction :${emoji}: added by ${userId} to message ${itemTs}`,
+      event,
+    ).catch((err) => {
+      this.logger.error(`Failed to log event: ${err.message}`);
+    });
+
+    // Test: Track sentiment
     if (emoji === 'thumbsup' || emoji === 'heart' || emoji === 'tada') {
-      this.logger.log(`✨ Positive reaction counted from ${userId}`);
+      this.logger.log(`✅ Test: Positive reaction counted from ${userId}`);
     } else if (emoji === 'thumbsdown' || emoji === 'x') {
-      this.logger.log(`⚠️ Negative reaction recorded from ${userId}`);
+      this.logger.log(`⚠️ Test: Negative reaction recorded from ${userId}`);
     }
   }
 
@@ -306,13 +411,24 @@ export class SlackEventHandlerService {
     const userId = event['user'] as string;
     const item = event['item'] as Record<string, unknown> | undefined;
     const itemTs = item?.['ts'] as string | undefined;
+    const channel = item?.['channel'] as string | undefined;
 
     this.logger.debug(
       `Reaction removed | Emoji: :${emoji}: | User: ${userId} | Message: ${itemTs}`,
     );
 
-    // Business logic: Update reaction counts, remove votes, etc.
-    // Example: Could trigger re-evaluation of aggregations
+    // Log event to Message table
+    await this.slack.logEventToMessages(
+      'reaction_removed',
+      channel || 'unknown',
+      `Reaction :${emoji}: removed by ${userId} from message ${itemTs}`,
+      event,
+    ).catch((err) => {
+      this.logger.error(`Failed to log event: ${err.message}`);
+    });
+
+    // Test: Log removal
+    this.logger.debug(`✅ Test: Logged reaction removal event`);
   }
 
   // ============ User Event Handlers ============
@@ -328,15 +444,24 @@ export class SlackEventHandlerService {
       `👤 User profile updated | User: ${userId} | Name: ${name || realName}`,
     );
 
-    // Business logic: Update user metadata, sync to other systems, audit changes
-    // Example: Track user profile changes for compliance
+    // Log event to Message table
+    await this.slack.logEventToMessages(
+      'user_change',
+      userId || 'unknown',
+      `User profile updated: ${name || realName}`,
+      event,
+    ).catch((err) => {
+      this.logger.error(`Failed to log event: ${err.message}`);
+    });
+
+    // Test: Track profile changes
     if (profile) {
       const statusText = profile['status_text'] as string | undefined;
       const statusEmoji = profile['status_emoji'] as string | undefined;
 
       if (statusText || statusEmoji) {
         this.logger.log(
-          `Status changed: ${statusEmoji} ${statusText}`,
+          `✅ Test: Status changed: ${statusEmoji} ${statusText}`,
         );
       }
     }
@@ -353,14 +478,23 @@ export class SlackEventHandlerService {
       `🎉 New user joined workspace | User: ${userId} | Name: ${realName} | Email: ${email}`,
     );
 
-    // Business logic: Onboard new users, send welcome packs, grant initial access
-    // Example: Send welcome DM and add to default channels
+    // Log event to Message table
+    await this.slack.logEventToMessages(
+      'team_join',
+      userId || 'unknown',
+      `New user joined: ${realName} (${email})`,
+      event,
+    ).catch((err) => {
+      this.logger.error(`Failed to log event: ${err.message}`);
+    });
+
+    // Test response: Send welcome DM
     if (userId) {
       await this.slack
         .sendToRecipients({
           messageId: `onboard-${userId}`,
           recipients: [userId],
-          message: `🎉 Welcome to the workspace${realName ? `, ${realName}` : ''}!\n\nI'm your Slack bot assistant. Feel free to mention me with \`@bot-action\` if you need help.\n\n📖 *Quick Links:*\n• Check out #introductions to introduce yourself\n• Join #general for team updates\n• Visit #help for frequently asked questions`,
+          message: `✅ Test: Welcome to the workspace${realName ? `, ${realName}` : ''}!\n\nI'm your Slack bot assistant. Feel free to mention me if you need help.\n\n📖 *Quick Links:*\n• Check out #introductions to introduce yourself\n• Join #general for team updates\n• Visit #help for frequently asked questions`,
         })
         .catch((err) => {
           this.logger.error(`Failed to send onboarding message: ${err.message}`);
@@ -382,12 +516,21 @@ export class SlackEventHandlerService {
       `📎 File uploaded | Name: ${fileName} | Size: ${size} bytes | Type: ${mimetype} | User: ${userId}`,
     );
 
-    // Business logic: Process files, scan for security, index for search, archive
-    // Example: Could trigger virus scanning, format conversion, metadata extraction
+    // Log event to Message table
+    await this.slack.logEventToMessages(
+      'file_created',
+      'file-' + fileId,
+      `File uploaded: ${fileName} (${size} bytes) by ${userId}`,
+      event,
+    ).catch((err) => {
+      this.logger.error(`Failed to log event: ${err.message}`);
+    });
+
+    // Test: Check file types
     if (fileName && fileName.match(/\.(exe|bat|sh|cmd)$/i)) {
-      this.logger.warn(`⚠️ Executable file detected: ${fileName}`);
+      this.logger.warn(`⚠️ Test: Executable file detected: ${fileName}`);
     } else if (fileName && fileName.match(/\.(jpg|png|gif|pdf)$/i)) {
-      this.logger.log(`📷 Media file detected: ${fileName}`);
+      this.logger.log(`✅ Test: Media file detected: ${fileName}`);
     }
   }
 
@@ -396,7 +539,17 @@ export class SlackEventHandlerService {
 
     this.logger.log(`🗑️ File deleted | File ID: ${fileId}`);
 
-    // Business logic: Clean up file references, update indices, maintain audit trail
-    // Example: Could update search indices, notify file watchers
+    // Log event to Message table
+    await this.slack.logEventToMessages(
+      'file_deleted',
+      'file-' + fileId,
+      `File deleted: ${fileId}`,
+      event,
+    ).catch((err) => {
+      this.logger.error(`Failed to log event: ${err.message}`);
+    });
+
+    // Test: Log deletion
+    this.logger.debug(`✅ Test: Logged file deletion event`);
   }
 }
