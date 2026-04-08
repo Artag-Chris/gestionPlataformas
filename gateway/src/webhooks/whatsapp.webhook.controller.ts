@@ -2,7 +2,7 @@ import { Controller, Post, Get, Query, Body, HttpCode, HttpStatus, Logger } from
 import { ConfigService } from '@nestjs/config';
 import { WhatsappEventRouterService } from '../whatsapp/services/whatsapp-event-router.service';
 
-@Controller('api/webhooks/whatsapp')
+@Controller('webhooks/whatsapp')
 export class WhatsappWebhookController {
   private readonly logger = new Logger(WhatsappWebhookController.name);
 
