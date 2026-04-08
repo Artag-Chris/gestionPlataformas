@@ -4,6 +4,9 @@ import { WhatsappService } from './whatsapp.service';
 import { ROUTING_KEYS, QUEUES } from '../rabbitmq/constants/queues';
 import { SendWhatsappDto } from './dto/send-whatsapp.dto';
 
+// Identity service routing keys
+const IDENTITY_RESOLVE_ROUTING_KEY = 'channels.identity.resolve';
+
 @Injectable()
 export class WhatsappListener implements OnModuleInit {
   private readonly logger = new Logger(WhatsappListener.name);
@@ -107,6 +110,7 @@ export class WhatsappListener implements OnModuleInit {
 
   private async handleMessageReceived(payload: Record<string, unknown>): Promise<void> {
     const value = payload.value as any;
+    const entry = payload.entry as any;
 
     // Detectar si es evento de STATUS de mensaje (delivery status)
     if (value.statuses && Array.isArray(value.statuses)) {
@@ -137,8 +141,37 @@ export class WhatsappListener implements OnModuleInit {
     }
 
     // Si es mensaje entrante normal (no status)
-    this.logger.log(`📨 Incoming message: ${JSON.stringify(value)}`);
-    // TODO: Implement incoming message handling logic
+    // Extraer datos de usuario y resolver identidad
+    if (value.messages && Array.isArray(value.messages)) {
+      for (const message of value.messages) {
+        const senderId = message.from;
+        const senderName = message.profile?.name || senderId;
+
+        this.logger.log(`📨 Incoming message from ${senderId} (${senderName})`);
+
+        // Publicar evento de resolución de identidad
+        try {
+          await this.rabbitmq.publish(IDENTITY_RESOLVE_ROUTING_KEY, {
+            channel: 'whatsapp',
+            channelUserId: senderId,
+            phone: senderId, // WhatsApp ID es el teléfono
+            displayName: senderName,
+            metadata: {
+              messageId: message.id,
+              timestamp: message.timestamp,
+            },
+          });
+
+          this.logger.debug(
+            `Identity resolution event published for user ${senderId}`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Failed to publish identity resolution: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+    }
   }
 
   private async handleMessageEcho(payload: Record<string, unknown>): Promise<void> {
@@ -157,8 +190,40 @@ export class WhatsappListener implements OnModuleInit {
   }
 
   private async handlePhoneNumberUpdate(payload: Record<string, unknown>): Promise<void> {
-    this.logger.log(`📞 Phone number update event: ${JSON.stringify(payload)}`);
-    // TODO: Implement phone number update handling logic
+    const value = payload.value as any;
+
+    this.logger.log(`📞 Phone number update event: ${JSON.stringify(value)}`);
+
+    // Extraer información del cambio de teléfono
+    // Esperado formato: { users: [{ old_phone: string, new_phone: string, user_id: string }] }
+    if (value.users && Array.isArray(value.users)) {
+      for (const user of value.users) {
+        const { old_phone, new_phone, user_id } = user;
+
+        this.logger.log(
+          `📞 Phone number update: ${old_phone} → ${new_phone} (User: ${user_id})`,
+        );
+
+        // Publicar evento a identity service para actualizar
+        try {
+          await this.rabbitmq.publish(ROUTING_KEYS.WHATSAPP_PHONE_NUMBER_UPDATE, {
+            oldPhoneNumber: old_phone,
+            newPhoneNumber: new_phone,
+            userId: user_id,
+            channel: 'whatsapp',
+            timestamp: Date.now(),
+          });
+
+          this.logger.debug(
+            `Phone number update event published for user ${user_id}`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Failed to publish phone number update: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+    }
   }
 
   private async handleTemplateUpdate(payload: Record<string, unknown>): Promise<void> {

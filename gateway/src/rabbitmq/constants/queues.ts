@@ -95,6 +95,11 @@ export const ROUTING_KEYS = {
 
   FACEBOOK_SEND: 'channels.facebook.send',
   FACEBOOK_RESPONSE: 'channels.facebook.response',
+
+  // Identity Service
+  IDENTITY_RESOLVE: 'channels.identity.resolve',
+  IDENTITY_MERGE: 'channels.identity.merge',
+  IDENTITY_DELETE: 'channels.identity.delete',
 } as const;
 
 export const QUEUES = {
