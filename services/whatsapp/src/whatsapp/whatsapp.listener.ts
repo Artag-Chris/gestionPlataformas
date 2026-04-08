@@ -106,7 +106,38 @@ export class WhatsappListener implements OnModuleInit {
   // ─────────────────────────────────────────
 
   private async handleMessageReceived(payload: Record<string, unknown>): Promise<void> {
-    this.logger.log(`📨 Message received event: ${JSON.stringify(payload)}`);
+    const value = payload.value as any;
+
+    // Detectar si es evento de STATUS de mensaje (delivery status)
+    if (value.statuses && Array.isArray(value.statuses)) {
+      for (const status of value.statuses) {
+        // Solo procesar fallos por Re-engagement (código 131047)
+        if (status.status === 'failed' && status.errors?.length > 0) {
+          const errorCode = status.errors[0].code;
+          const recipient = status.recipient_id;
+
+          if (errorCode === 131047) {
+            this.logger.log(
+              `⚠️ Re-engagement failure for ${recipient} | code: ${errorCode}`,
+            );
+
+            // Enviar plantilla como fallback (con reintentos)
+            try {
+              await this.whatsapp.sendTemplateToFailedRecipient(recipient);
+            } catch (error) {
+              this.logger.error(
+                `Failed to send fallback template to ${recipient}`,
+                error instanceof Error ? error.message : String(error),
+              );
+            }
+          }
+        }
+      }
+      return;
+    }
+
+    // Si es mensaje entrante normal (no status)
+    this.logger.log(`📨 Incoming message: ${JSON.stringify(value)}`);
     // TODO: Implement incoming message handling logic
   }
 

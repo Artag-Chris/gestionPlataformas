@@ -202,6 +202,77 @@ export class WhatsappService {
   }
 
   // ─────────────────────────────────────────
+  // Enviar plantilla por fallo de Re-engagement
+  // ─────────────────────────────────────────
+
+  /**
+   * Enviar plantilla a un número que tuvo fallo por Re-engagement (24h sin respuesta)
+   * Incluye reintentos automáticos
+   * @param recipient - Número de teléfono que falló
+   */
+  async sendTemplateToFailedRecipient(recipient: string): Promise<void> {
+    const maxRetries = 2;
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        this.logger.log(
+          `Sending fallback template to ${recipient} [Attempt ${attempt}/${maxRetries}] | template: ${this.templateName}`,
+        );
+
+        const templatePayload = {
+          messaging_product: 'whatsapp',
+          to: recipient,
+          type: 'template',
+          template: {
+            name: this.templateName, // 'presentacion_de_ia'
+            language: {
+              code: this.templateLanguage, // 'en'
+            },
+          },
+        };
+
+        const response = await axios.post<MetaApiResponse>(
+          this.apiUrl,
+          templatePayload,
+          {
+            headers: {
+              Authorization: `Bearer ${this.apiToken}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        );
+
+        const waMessageId = response.data.messages[0]?.id;
+
+        this.logger.log(
+          `✅ Fallback template sent to ${recipient} [Attempt ${attempt}/${maxRetries}] | wamid: ${waMessageId}`,
+        );
+
+        return; // Éxito, salir
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        const { reason } = this.extractErrorDetail(error);
+
+        if (attempt < maxRetries) {
+          this.logger.warn(
+            `Attempt ${attempt}/${maxRetries} failed for ${recipient}: ${reason}. Retrying in 2 seconds...`,
+          );
+          // Esperar 2 segundos antes de reintentar
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        } else {
+          this.logger.error(
+            `❌ Fallback template failed after ${maxRetries} attempts for ${recipient}: ${reason}`,
+          );
+        }
+      }
+    }
+
+    // Si llegamos aquí, todos los intentos fallaron
+    throw lastError || new Error('Unknown error sending fallback template');
+  }
+
+  // ─────────────────────────────────────────
   // Helpers privados
   // ─────────────────────────────────────────
 
