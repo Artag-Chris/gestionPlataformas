@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { RabbitMQModule } from '../../rabbitmq/rabbitmq.module';
-import { RequestResponseManager } from '../services/request-response.manager';
-import { IdentityResponseListener } from '../services/identity-response.listener';
+import { RequestResponseManager } from '../../identity/services/request-response.manager';
+import { IdentityResponseListener } from '../../identity/services/identity-response.listener';
 import { IdentityService } from './identity.service';
 import { IdentityController } from './identity.controller';
 

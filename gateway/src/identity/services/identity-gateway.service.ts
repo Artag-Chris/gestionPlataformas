@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { RabbitMQService } from '../../rabbitmq/rabbitmq.service';
-import { IDENTITY_ROUTING_KEYS } from '../../rabbitmq/constants/queues';
+import { ROUTING_KEYS } from '../../rabbitmq/constants/queues';
 
 @Injectable()
 export class IdentityGatewayService {
@@ -11,18 +11,12 @@ export class IdentityGatewayService {
   /// Publish resolve identity event to identity-service
   async resolveIdentity(data: any): Promise<void> {
     this.logger.debug(`Publishing resolve identity event: ${JSON.stringify(data)}`);
-    await this.rabbitmqService.publish(
-      IDENTITY_ROUTING_KEYS.RESOLVE_IDENTITY,
-      data,
-    );
+    this.rabbitmqService.publish(ROUTING_KEYS.IDENTITY_RESOLVE, data);
   }
 
   /// Publish phone number update event
   async publishPhoneNumberUpdate(data: any): Promise<void> {
     this.logger.debug(`Publishing phone number update event: ${JSON.stringify(data)}`);
-    await this.rabbitmqService.publish(
-      IDENTITY_ROUTING_KEYS.WHATSAPP_PHONE_CHANGED,
-      data,
-    );
+    this.rabbitmqService.publish(ROUTING_KEYS.IDENTITY_UPDATE_PHONE, data);
   }
 }

@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { RabbitMQService } from '../../rabbitmq/rabbitmq.service';
-import { RequestResponseManager } from '../services/request-response.manager';
+import { RequestResponseManager } from '../../identity/services/request-response.manager';
 import { ROUTING_KEYS } from '../../rabbitmq/constants/queues';
 import { ResolveIdentityDto, MergeUsersDto } from './dto';
 

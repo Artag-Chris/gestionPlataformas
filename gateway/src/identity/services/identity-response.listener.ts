@@ -18,16 +18,11 @@ export class IdentityResponseListener implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit(): Promise<void> {
     try {
-      // Declare response queue
-      await this.rabbitmq.declareQueue(
+      // Start consuming responses using gateway's subscribe method
+      await this.rabbitmq.subscribe(
         QUEUES.IDENTITY_RESPONSES,
         ROUTING_KEYS.IDENTITY_RESPONSE,
-      );
-
-      // Start consuming responses
-      await this.rabbitmq.consume(
-        QUEUES.IDENTITY_RESPONSES,
-        (message) => this.handleResponse(message),
+        (message: Record<string, unknown>) => this.handleResponse(message),
       );
 
       this.logger.log('Identity response listener started');
@@ -37,9 +32,9 @@ export class IdentityResponseListener implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async handleResponse(message: any): Promise<void> {
+  private async handleResponse(message: Record<string, unknown>): Promise<void> {
     try {
-      const { correlationId, success, error } = message;
+      const { correlationId, success, error } = message as any;
 
       if (!correlationId) {
         this.logger.warn('Received response without correlationId');
@@ -53,16 +48,16 @@ export class IdentityResponseListener implements OnModuleInit, OnModuleDestroy {
       if (success) {
         // Resolve the promise with the entire message (minus correlationId)
         const { correlationId: _, ...data } = message;
-        this.requestResponseManager.resolveResponse(correlationId, data);
+        this.requestResponseManager.resolveResponse(correlationId as string, data);
       } else {
         // Reject the promise with error
         this.requestResponseManager.rejectResponse(
-          correlationId,
+          correlationId as string,
           error || 'Unknown error from identity-service',
         );
       }
     } catch (error) {
-      this.logger.error(`Error handling response: ${error.message}`, error.stack);
+      this.logger.error(`Error handling response: ${error.message}`, error instanceof Error ? error.stack : '');
     }
   }
 
