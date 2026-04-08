@@ -43,6 +43,26 @@ services:
       PORT: ${GATEWAY_PORT}
 
   # ─────────────────────────────────────────
+  # Identity Service
+  # ─────────────────────────────────────────
+  identity:
+    build:
+      context: ./services/identity
+      dockerfile: Dockerfile
+    container_name: identity-service
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - '${IDENTITY_PORT}:${IDENTITY_PORT}'
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      DATABASE_URL: ${IDENTITY_DATABASE_URL}
+      PORT: ${IDENTITY_PORT}
+
+  # ─────────────────────────────────────────
   # WhatsApp Microservice
   # ─────────────────────────────────────────
   whatsapp:
