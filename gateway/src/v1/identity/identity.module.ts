@@ -1,11 +1,14 @@
 import { Module } from '@nestjs/common';
-import { PrismaModule } from '../../prisma/prisma.module';
+import { RabbitMQModule } from '../../rabbitmq/rabbitmq.module';
+import { RequestResponseManager } from '../services/request-response.manager';
+import { IdentityResponseListener } from '../services/identity-response.listener';
 import { IdentityService } from './identity.service';
 import { IdentityController } from './identity.controller';
 
 @Module({
-  imports: [PrismaModule],
-  providers: [IdentityService],
+  imports: [RabbitMQModule],
+  providers: [RequestResponseManager, IdentityResponseListener, IdentityService],
   controllers: [IdentityController],
+  exports: [RequestResponseManager],
 })
 export class IdentityModule {}

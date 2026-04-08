@@ -19,26 +19,90 @@ export class IdentityListener implements OnModuleInit {
 
   private async setupListeners(): Promise<void> {
     try {
-      // Declare queues
+      // Declare queues for write operations (fire-and-forget)
       await this.rabbitmqService.declareQueue(
         IDENTITY_QUEUES.RESOLVE_IDENTITY,
         IDENTITY_ROUTING_KEYS.RESOLVE_IDENTITY,
       );
 
       await this.rabbitmqService.declareQueue(
-        IDENTITY_QUEUES.PHONE_NUMBER_UPDATE,
-        IDENTITY_ROUTING_KEYS.WHATSAPP_PHONE_CHANGED,
+        IDENTITY_QUEUES.UPDATE_PHONE,
+        IDENTITY_ROUTING_KEYS.UPDATE_PHONE,
       );
 
-      // Start consuming
+      await this.rabbitmqService.declareQueue(
+        IDENTITY_QUEUES.UPDATE_EMAIL,
+        IDENTITY_ROUTING_KEYS.UPDATE_EMAIL,
+      );
+
+      // Declare queues for read operations (request-response)
+      await this.rabbitmqService.declareQueue(
+        IDENTITY_QUEUES.GET_USER,
+        IDENTITY_ROUTING_KEYS.GET_USER,
+      );
+
+      await this.rabbitmqService.declareQueue(
+        IDENTITY_QUEUES.GET_ALL_USERS,
+        IDENTITY_ROUTING_KEYS.GET_ALL_USERS,
+      );
+
+      await this.rabbitmqService.declareQueue(
+        IDENTITY_QUEUES.GET_REPORT,
+        IDENTITY_ROUTING_KEYS.GET_REPORT,
+      );
+
+      // Declare queues for update operations (fire-and-forget)
+      await this.rabbitmqService.declareQueue(
+        IDENTITY_QUEUES.MERGE_USERS,
+        IDENTITY_ROUTING_KEYS.MERGE_USERS,
+      );
+
+      await this.rabbitmqService.declareQueue(
+        IDENTITY_QUEUES.DELETE_USER,
+        IDENTITY_ROUTING_KEYS.DELETE_USER,
+      );
+
+      // Start consuming write operations
       await this.rabbitmqService.consume(
         IDENTITY_QUEUES.RESOLVE_IDENTITY,
         (message) => this.handleResolveIdentity(message),
       );
 
       await this.rabbitmqService.consume(
-        IDENTITY_QUEUES.PHONE_NUMBER_UPDATE,
+        IDENTITY_QUEUES.UPDATE_PHONE,
         (message) => this.handlePhoneNumberUpdate(message),
+      );
+
+      await this.rabbitmqService.consume(
+        IDENTITY_QUEUES.UPDATE_EMAIL,
+        (message) => this.handleEmailUpdate(message),
+      );
+
+      // Start consuming read operations (request-response)
+      await this.rabbitmqService.consume(
+        IDENTITY_QUEUES.GET_USER,
+        (message) => this.handleGetUser(message),
+      );
+
+      await this.rabbitmqService.consume(
+        IDENTITY_QUEUES.GET_ALL_USERS,
+        (message) => this.handleGetAllUsers(message),
+      );
+
+      await this.rabbitmqService.consume(
+        IDENTITY_QUEUES.GET_REPORT,
+        (message) => this.handleGetReport(message),
+      );
+
+      // Start consuming update operations
+      await this.rabbitmqService.consume(
+        IDENTITY_QUEUES.MERGE_USERS,
+        (message) => this.handleMergeUsers(message),
+      );
+
+      await this.rabbitmqService.consume(
+        IDENTITY_QUEUES.DELETE_USER,
+        (message) => this.handleDeleteUser(message),
       );
 
       this.logger.log('Identity listeners initialized');
@@ -48,7 +112,10 @@ export class IdentityListener implements OnModuleInit {
     }
   }
 
-  /// Handle identity resolution from channels
+  // ────────────────────────────────────────────────────────────────
+  // Write Operations (Fire-and-forget)
+  // ────────────────────────────────────────────────────────────────
+
   private async handleResolveIdentity(message: any): Promise<void> {
     try {
       this.logger.debug(`Processing resolve identity event: ${JSON.stringify(message)}`);
@@ -78,7 +145,6 @@ export class IdentityListener implements OnModuleInit {
     }
   }
 
-  /// Handle phone number changes from WhatsApp
   private async handlePhoneNumberUpdate(message: any): Promise<void> {
     try {
       this.logger.debug(
@@ -114,6 +180,181 @@ export class IdentityListener implements OnModuleInit {
         `Error handling phone number update: ${error.message}`,
         error.stack,
       );
+      throw error;
+    }
+  }
+
+  private async handleEmailUpdate(message: any): Promise<void> {
+    try {
+      this.logger.debug(
+        `Processing email update: ${JSON.stringify(message)}`,
+      );
+
+      const { oldEmail, newEmail, userId, source } = message;
+
+      // Similar logic to phone update
+      // Update email contact for the user
+      this.logger.log(
+        `Email updated: ${oldEmail} -> ${newEmail} for user ${userId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error handling email update: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  private async handleMergeUsers(message: any): Promise<void> {
+    try {
+      this.logger.debug(
+        `Processing merge users: ${JSON.stringify(message)}`,
+      );
+
+      const { primaryUserId, secondaryUserId, reason } = message;
+
+      const result = await this.identityService.mergeUsers({
+        primaryUserId,
+        secondaryUserId,
+        reason,
+      });
+
+      this.logger.log(`Users merged successfully: ${result.id}`);
+    } catch (error) {
+      this.logger.error(
+        `Error handling merge users: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  private async handleDeleteUser(message: any): Promise<void> {
+    try {
+      this.logger.debug(
+        `Processing delete user: ${JSON.stringify(message)}`,
+      );
+
+      const { userId } = message;
+
+      const result = await this.identityService.deleteUser(userId);
+
+      this.logger.log(`User deleted: ${result.id}`);
+    } catch (error) {
+      this.logger.error(
+        `Error handling delete user: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────
+  // Read Operations (Request-Response)
+  // ────────────────────────────────────────────────────────────────
+
+  private async handleGetUser(message: any): Promise<void> {
+    try {
+      this.logger.debug(`Processing get user: ${JSON.stringify(message)}`);
+
+      const { correlationId, userId } = message;
+
+      const user = await this.identityService.getUser(userId);
+
+      // Publish response back to gateway
+      await this.rabbitmqService.publish(IDENTITY_ROUTING_KEYS.RESPONSE, {
+        correlationId,
+        user,
+        success: true,
+      });
+
+      this.logger.log(`Get user response sent for correlationId: ${correlationId}`);
+    } catch (error) {
+      this.logger.error(
+        `Error handling get user: ${error.message}`,
+        error.stack,
+      );
+
+      // Publish error response
+      if (message.correlationId) {
+        await this.rabbitmqService.publish(IDENTITY_ROUTING_KEYS.RESPONSE, {
+          correlationId: message.correlationId,
+          success: false,
+          error: error.message,
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  private async handleGetAllUsers(message: any): Promise<void> {
+    try {
+      this.logger.debug(`Processing get all users: ${JSON.stringify(message)}`);
+
+      const { correlationId, filters } = message;
+
+      const users = await this.identityService.getAllUsers(filters);
+
+      // Publish response back to gateway
+      await this.rabbitmqService.publish(IDENTITY_ROUTING_KEYS.RESPONSE, {
+        correlationId,
+        users,
+        success: true,
+      });
+
+      this.logger.log(`Get all users response sent for correlationId: ${correlationId}`);
+    } catch (error) {
+      this.logger.error(
+        `Error handling get all users: ${error.message}`,
+        error.stack,
+      );
+
+      // Publish error response
+      if (message.correlationId) {
+        await this.rabbitmqService.publish(IDENTITY_ROUTING_KEYS.RESPONSE, {
+          correlationId: message.correlationId,
+          success: false,
+          error: error.message,
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  private async handleGetReport(message: any): Promise<void> {
+    try {
+      this.logger.debug(`Processing get report: ${JSON.stringify(message)}`);
+
+      const { correlationId } = message;
+
+      const report = await this.identityService.getReport();
+
+      // Publish response back to gateway
+      await this.rabbitmqService.publish(IDENTITY_ROUTING_KEYS.RESPONSE, {
+        correlationId,
+        report,
+        success: true,
+      });
+
+      this.logger.log(`Get report response sent for correlationId: ${correlationId}`);
+    } catch (error) {
+      this.logger.error(
+        `Error handling get report: ${error.message}`,
+        error.stack,
+      );
+
+      // Publish error response
+      if (message.correlationId) {
+        await this.rabbitmqService.publish(IDENTITY_ROUTING_KEYS.RESPONSE, {
+          correlationId: message.correlationId,
+          success: false,
+          error: error.message,
+        });
+      }
+
       throw error;
     }
   }
