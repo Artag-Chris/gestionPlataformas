@@ -12,6 +12,9 @@ export const ROUTING_KEYS = {
   INSTAGRAM_REFERRAL_RECEIVED: 'channels.instagram.events.referral',
   INSTAGRAM_OPTIN_RECEIVED: 'channels.instagram.events.optin',
   INSTAGRAM_HANDOVER_RECEIVED: 'channels.instagram.events.handover',
+
+  // Identity Service
+  IDENTITY_RESOLVE: 'channels.identity.resolve',
 } as const;
 
 export const QUEUES = {

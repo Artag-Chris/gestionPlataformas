@@ -144,7 +144,12 @@ export class IdentityService {
   private async linkIdentityToUser(userId: string, dto: ResolveIdentityDto): Promise<User> {
     const trustScore = this.CHANNEL_TRUST_SCORES[dto.channel] || 0.5;
 
-    // Create the user identity
+    // Create the user identity con username en metadata
+    const metadata = {
+      ...dto.metadata,
+      username: dto.username,
+    };
+
     await this.prisma.userIdentity.create({
       data: {
         channelUserId: dto.channelUserId,
@@ -152,7 +157,7 @@ export class IdentityService {
         displayName: dto.displayName,
         avatarUrl: dto.avatarUrl,
         trustScore,
-        metadata: dto.metadata,
+        metadata,
         userId,
       },
     });
@@ -164,9 +169,15 @@ export class IdentityService {
 
     if (!user) throw new Error(`User ${userId} not found`);
 
+    // Agregar username como nickname si no está incluido
+    let nicknamesToAdd: string[] = [];
+    if (dto.username && !user.nicknames.includes(dto.username)) {
+      nicknamesToAdd.push(dto.username);
+    }
+
     if (dto.displayName && trustScore > (user.nameTrustScore || 0)) {
       this.logger.debug(
-        `Updating user name from ${user.realName} to ${dto.displayName} (source: ${dto.channel})`,
+        `Updating user name from ${user.realName} to ${dto.displayName} (source: ${dto.channel})`
       );
 
       // Record name history
@@ -181,7 +192,11 @@ export class IdentityService {
         },
       });
 
-      // Update user with new name
+      // Update user with new name y nicknames
+      const nicknamesToPush = [user.realName || dto.displayName, ...nicknamesToAdd].filter(
+        (n): n is string => n !== null && n !== undefined && !user.nicknames.includes(n)
+      );
+
       const updatedUser = await this.prisma.user.update({
         where: { id: userId },
         data: {
@@ -189,18 +204,33 @@ export class IdentityService {
           nameTrustScore: trustScore,
           nameSource: dto.channel,
           nicknames: {
-            push: user.realName || dto.displayName,
+            push: nicknamesToPush,
           },
         },
       });
       return updatedUser;
     } else if (dto.displayName && !user.nicknames.includes(dto.displayName)) {
       // Add as nickname if not already there
+      const nicknamesToPush = [dto.displayName, ...nicknamesToAdd].filter(
+        (n): n is string => n !== null && n !== undefined && !user.nicknames.includes(n)
+      );
+
       const updatedUser = await this.prisma.user.update({
         where: { id: userId },
         data: {
           nicknames: {
-            push: dto.displayName,
+            push: nicknamesToPush,
+          },
+        },
+      });
+      return updatedUser;
+    } else if (nicknamesToAdd.length > 0) {
+      // Solo agregar username como nickname si no hay cambio de nombre
+      const updatedUser = await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          nicknames: {
+            push: nicknamesToAdd,
           },
         },
       });
@@ -215,17 +245,32 @@ export class IdentityService {
     const trustScore = this.CHANNEL_TRUST_SCORES[dto.channel] || 0.5;
     const userId = uuid();
 
+    // Crear lista de nicknames con displayName y username si están disponibles
+    const nicknames: string[] = [];
+    if (dto.displayName) {
+      nicknames.push(dto.displayName);
+    }
+    // Agregar username como nickname si es diferente al displayName
+    if (dto.username && dto.username !== dto.displayName && !nicknames.includes(dto.username)) {
+      nicknames.push(dto.username);
+    }
+
     const user = await this.prisma.user.create({
       data: {
         id: userId,
         realName: dto.displayName,
-        nicknames: dto.displayName ? [dto.displayName] : [],
+        nicknames,
         nameTrustScore: trustScore,
         nameSource: dto.channel,
       },
     });
 
-    // Create the user identity
+    // Create the user identity con username en metadata
+    const metadata = {
+      ...dto.metadata,
+      username: dto.username,
+    };
+
     await this.prisma.userIdentity.create({
       data: {
         channelUserId: dto.channelUserId,
@@ -233,7 +278,7 @@ export class IdentityService {
         displayName: dto.displayName,
         avatarUrl: dto.avatarUrl,
         trustScore,
-        metadata: dto.metadata,
+        metadata,
         userId,
       },
     });

@@ -178,37 +178,125 @@ export class InstagramService {
    }
 
    async getConversations(): Promise<Array<{ conversationId: string; igsid: string; username?: string }>> {
-     try {
-       const businessAccountId = this.config.get<string>('INSTAGRAM_BUSINESS_ACCOUNT_ID');
-       console.log(`[INSTAGRAM] Fetching conversations for Business Account ID: ${businessAccountId}`);
-       
-       const url = `https://graph.facebook.com/v19.0/${businessAccountId}/conversations`;
-       console.log(`[INSTAGRAM] API URL: ${url}`);
-       
-        const response = await axios.get(url, {
-          params: {
-            access_token: this.pageToken,
-            fields: 'id,senders,participants,message',
-            user_id: businessAccountId,
+      try {
+        const businessAccountId = this.config.get<string>('INSTAGRAM_BUSINESS_ACCOUNT_ID');
+        console.log(`[INSTAGRAM] Fetching conversations for Business Account ID: ${businessAccountId}`);
+        
+        const url = `https://graph.facebook.com/v19.0/${businessAccountId}/conversations`;
+        console.log(`[INSTAGRAM] API URL: ${url}`);
+        
+         const response = await axios.get(url, {
+           params: {
+             access_token: this.pageToken,
+             fields: 'id,senders,participants,message',
+             user_id: businessAccountId,
+           },
+         });
+
+        console.log(`[INSTAGRAM] API Response:`, JSON.stringify(response.data));
+        
+        const conversations = response.data.data || [];
+        const result = conversations.map((conv: any) => ({
+          conversationId: conv.id,
+          igsid: conv.senders?.[0]?.id || conv.id,
+          username: conv.senders?.[0]?.name,
+        }));
+        
+        console.log(`[INSTAGRAM] Returning ${result.length} conversations`);
+        return result;
+      } catch (error) {
+        const errorMsg = this.extractError(error);
+        console.error(`[INSTAGRAM_ERROR] Failed to fetch conversations:`, errorMsg);
+        this.logger.error(`Failed to fetch conversations: ${errorMsg}`);
+        throw error;
+      }
+    }
+
+    /**
+     * Fetch user profile from BD cache first, fallback to Graph API
+     * Reduces API calls and improves performance for repeat messages
+     */
+    async getUserProfileWithCache(igsid: string): Promise<{
+      displayName?: string;
+      username?: string;
+    }> {
+      try {
+        // 📌 PASO 1: Buscar en BD primero (caché)
+        const existingIdentity = await this.prisma.userIdentity.findUnique({
+          where: {
+            channelUserId_channel: {
+              channelUserId: igsid,
+              channel: 'instagram',
+            },
           },
         });
 
-       console.log(`[INSTAGRAM] API Response:`, JSON.stringify(response.data));
-       
-       const conversations = response.data.data || [];
-       const result = conversations.map((conv: any) => ({
-         conversationId: conv.id,
-         igsid: conv.senders?.[0]?.id || conv.id,
-         username: conv.senders?.[0]?.name,
-       }));
-       
-       console.log(`[INSTAGRAM] Returning ${result.length} conversations`);
-       return result;
-     } catch (error) {
-       const errorMsg = this.extractError(error);
-       console.error(`[INSTAGRAM_ERROR] Failed to fetch conversations:`, errorMsg);
-       this.logger.error(`Failed to fetch conversations: ${errorMsg}`);
-       throw error;
-     }
-   }
+        // Si encontramos y tiene displayName, usarlo (cache hit)
+        if (existingIdentity?.displayName) {
+          this.logger.debug(
+            `✅ Cache HIT: Found displayName in BD for IGSID ${igsid}: "${existingIdentity.displayName}"`
+          );
+          
+          // Extraer username del metadata si existe
+          const username = (existingIdentity.metadata as any)?.username;
+          return {
+            displayName: existingIdentity.displayName,
+            username,
+          };
+        }
+
+        // 📌 PASO 2: Si no está en BD o no tiene displayName, consultar Graph API
+        this.logger.debug(
+          `Cache MISS: Not found in BD or no displayName, querying Graph API for IGSID ${igsid}`
+        );
+        const apiProfile = await this.fetchUserProfileFromGraphApi(igsid);
+        return apiProfile;
+
+      } catch (error) {
+        this.logger.error(
+          `Error in getUserProfileWithCache: ${error instanceof Error ? error.message : String(error)}`
+        );
+        return {}; // Fallback vacío, usará IGSID en listener
+      }
+    }
+
+    /**
+     * Fetch user profile from Instagram Graph API
+     * GET /v25.0/{IGSID}?fields=username,name&access_token=TOKEN
+     */
+    private async fetchUserProfileFromGraphApi(igsid: string): Promise<{
+      displayName?: string;
+      username?: string;
+    }> {
+      try {
+        const version = this.config.get<string>('INSTAGRAM_API_VERSION') ?? 'v25.0';
+        const url = `https://graph.instagram.com/${version}/${igsid}`;
+
+        this.logger.debug(`Fetching Instagram profile from Graph API: ${url}`);
+
+        const response = await axios.get(url, {
+          params: {
+            fields: 'username,name',
+            access_token: this.pageToken,
+          },
+        });
+
+        const profileData = response.data;
+        const displayName = profileData.name || profileData.username;
+
+        this.logger.debug(
+          `✅ Graph API response for ${igsid}: name="${profileData.name}" username="${profileData.username}"`
+        );
+
+        return {
+          displayName,
+          username: profileData.username,
+        };
+      } catch (error) {
+        this.logger.warn(
+          `Could not fetch profile from Graph API for IGSID ${igsid}: ${error instanceof Error ? error.message : String(error)}`
+        );
+        return {}; // Fallback, usará IGSID en listener
+      }
+    }
 }

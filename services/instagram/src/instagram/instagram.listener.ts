@@ -93,12 +93,61 @@ export class InstagramListener implements OnModuleInit {
   }
 
   // ─────────────────────────────────────────
-  // Incoming Event Handlers (Placeholder)
+  // Incoming Event Handlers
   // ─────────────────────────────────────────
 
   private async handleMessageReceived(payload: Record<string, unknown>): Promise<void> {
-    this.logger.log(`📨 Message received event: ${JSON.stringify(payload)}`);
-    // TODO: Implement message handling logic
+    try {
+      const value = payload.value as any;
+      const senderId = value.sender?.id;
+
+      if (!senderId) {
+        this.logger.warn('Message received without sender ID');
+        return;
+      }
+
+      // Extraer información adicional del webhook
+      const isEcho = value.message?.is_echo === true;
+      const isSelf = value.message?.is_self === true;
+
+      this.logger.log(
+        `📨 Instagram message from ${senderId}${isEcho ? ' (echo)' : ''}${isSelf ? ' (self)' : ''}`
+      );
+
+      // 📌 PASO 1: Consultar perfil del usuario (con caché en BD)
+      const profile = await this.instagram.getUserProfileWithCache(senderId);
+
+      // 📌 PASO 2: Determinar displayName con fallbacks
+      const displayName = profile?.displayName || senderId;
+
+      this.logger.debug(
+        `Resolved displayName: "${displayName}" for IGSID ${senderId}`
+      );
+
+      // 📌 PASO 3: Publicar evento de resolución de identidad
+      await this.rabbitmq.publish(ROUTING_KEYS.IDENTITY_RESOLVE, {
+        channel: 'instagram',
+        channelUserId: senderId,
+        displayName,
+        username: profile?.username,
+        avatarUrl: null,
+        metadata: {
+          igsid: senderId,
+          timestamp: value.timestamp,
+          isEcho,
+          isSelf,
+        },
+      });
+
+      this.logger.log(
+        `✅ Identity resolved for ${senderId} → displayName: "${displayName}"`
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error handling Instagram message: ${error instanceof Error ? error.message : String(error)}`
+      );
+      // No relanzar error para no bloquear el flujo
+    }
   }
 
   private async handleCommentReceived(payload: Record<string, unknown>): Promise<void> {
