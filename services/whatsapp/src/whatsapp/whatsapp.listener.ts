@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { WhatsappService } from './whatsapp.service';
+import { AIResponseService } from './services/ai-response.service';
 import { ROUTING_KEYS, QUEUES } from '../rabbitmq/constants/queues';
 import { SendWhatsappDto } from './dto/send-whatsapp.dto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -15,6 +16,7 @@ export class WhatsappListener implements OnModuleInit {
   constructor(
     private readonly rabbitmq: RabbitMQService,
     private readonly whatsapp: WhatsappService,
+    private readonly aiResponseService: AIResponseService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -67,6 +69,25 @@ export class WhatsappListener implements OnModuleInit {
       QUEUES.WHATSAPP_EVENTS_ALERTS,
       ROUTING_KEYS.WHATSAPP_ALERTS_RECEIVED,
       (payload) => this.handleAccountAlerts(payload),
+    );
+
+    // AI Response listeners
+    await this.rabbitmq.subscribe(
+      QUEUES.WHATSAPP_AI_RESPONSE,
+      ROUTING_KEYS.WHATSAPP_AI_RESPONSE,
+      (payload) => this.handleAIResponse(payload),
+    );
+
+    await this.rabbitmq.subscribe(
+      QUEUES.WHATSAPP_AI_RESPONSE_CHUNK_FAILED,
+      ROUTING_KEYS.WHATSAPP_AI_RESPONSE_CHUNK_FAILED,
+      (payload) => this.handleFailedChunk(payload),
+    );
+
+    await this.rabbitmq.subscribe(
+      QUEUES.WHATSAPP_AI_RESPONSE_DLQ,
+      ROUTING_KEYS.WHATSAPP_AI_RESPONSE_DLQ,
+      (payload) => this.handleAIResponseDLQ(payload),
     );
   }
 
@@ -204,7 +225,7 @@ export class WhatsappListener implements OnModuleInit {
 
   /**
    * Process AI response for incoming message
-   * Checks if user has AI enabled, then calls N8N webhook
+   * Checks if user has AI enabled, rate limit, then calls N8N webhook
    */
   private async processAIResponse(
     senderId: string,
@@ -239,7 +260,18 @@ export class WhatsappListener implements OnModuleInit {
         return;
       }
 
-      this.logger.debug(`AI enabled for user ${user.id}, calling N8N webhook`);
+      // Check daily rate limit (20 calls/day per user)
+      const hasCapacity = await this.aiResponseService.checkDailyRateLimit(user.id);
+      if (!hasCapacity) {
+        this.logger.warn(
+          `User ${user.id} exceeded daily AI rate limit (20/day). Skipping N8N webhook.`,
+        );
+        // Opcionalmente, enviar mensaje al usuario informando del límite
+        // await this.whatsapp.sendToOneWithId(messageId, senderId, "You've reached your daily AI limit. Please try again tomorrow.");
+        return;
+      }
+
+      this.logger.debug(`AI enabled for user ${user.id}, rate limit OK. Calling N8N webhook`);
 
       // Call N8N webhook to generate AI response
       const n8nResponse = await this.whatsapp.callN8NWebhook(
@@ -348,5 +380,176 @@ export class WhatsappListener implements OnModuleInit {
   private async handleAccountAlerts(payload: Record<string, unknown>): Promise<void> {
     this.logger.log(`⚠️ Account alerts event: ${JSON.stringify(payload)}`);
     // TODO: Implement account alerts handling logic
+  }
+
+  // ─────────────────────────────────────────
+  // AI Response Handlers
+  // ─────────────────────────────────────────
+
+  /**
+   * Manejar respuesta de IA: dividir en chunks, enviar al usuario
+   */
+  private async handleAIResponse(payload: Record<string, unknown>): Promise<void> {
+    try {
+      const { userId, senderId, messageId, aiResponse, confidence, model, processingTime } =
+        payload as any;
+
+      this.logger.debug(
+        `[handleAIResponse] Processing AI response for user ${userId} | senderId: ${senderId}`,
+      );
+
+      // 1. Crear registro de auditoría
+      const aiResponseRecord = await this.aiResponseService.createAIResponse({
+        userId,
+        senderId,
+        messageId,
+        originalMessage: '', // No tenemos el original aquí, pero lo guardamos
+        aiResponse,
+        model,
+        confidence,
+        processingTime,
+      });
+
+      // 2. Dividir mensaje en chunks (con numeración)
+      const chunks = this.aiResponseService.splitMessageIntoChunks(aiResponse);
+
+      if (chunks.length === 0) {
+        this.logger.warn(`AI response is empty for user ${userId}`);
+        await this.aiResponseService.sendToDLQ(
+          aiResponseRecord.id,
+          'AI response is empty',
+        );
+        return;
+      }
+
+      // 3. Crear registros de chunks
+      const chunkRecords = await this.aiResponseService.createChunks(
+        aiResponseRecord.id,
+        chunks,
+      );
+
+      // 4. Enviar cada chunk (con reintentos internos)
+      let sentCount = 0;
+      let failureReason: string | null = null;
+
+      for (const chunk of chunkRecords) {
+        const result = await this.aiResponseService.sendChunkWithRetry(
+          chunk,
+          senderId,
+          (recipient, message, chunkMessageId) =>
+            this.sendChunkToUser(recipient, message, chunkMessageId),
+        );
+
+        if (result.success) {
+          // Actualizar chunk a SENT
+          await this.prisma.aIResponseChunk.update({
+            where: { id: chunk.id },
+            data: {
+              status: 'SENT',
+              waMessageId: result.waMessageId,
+              sentAt: new Date(),
+            },
+          });
+          sentCount++;
+        } else {
+          // Publicar evento de chunk fallido para retry
+          await this.rabbitmq.publish(ROUTING_KEYS.WHATSAPP_AI_RESPONSE_CHUNK_FAILED, {
+            chunkId: chunk.id,
+            aiResponseId: aiResponseRecord.id,
+            senderId,
+            error: result.error,
+          });
+          failureReason = result.error ?? null;
+        }
+      }
+
+      // 5. Actualizar estado del AIResponse
+      const finalStatus = await this.aiResponseService.updateAIResponseStatus(
+        aiResponseRecord.id,
+      );
+
+      this.logger.log(
+        `AI response processed: ${sentCount}/${chunkRecords.length} chunks sent | Status: ${finalStatus}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error handling AI response: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      // Publicar a DLQ si falla todo
+      if (payload.userId) {
+        // Necesitaríamos el aiResponseId, pero no lo tenemos en este error handler
+        // Por ahora solo loguear
+      }
+    }
+  }
+
+  /**
+   * Manejar fallo de chunk individual (para retry)
+   */
+  private async handleFailedChunk(payload: Record<string, unknown>): Promise<void> {
+    try {
+      const { chunkId, aiResponseId, senderId, error } = payload as any;
+
+      this.logger.debug(`[handleFailedChunk] Processing failed chunk ${chunkId}`);
+
+      // Manejar retry del chunk fallido
+      await this.aiResponseService.handleFailedChunk(chunkId);
+
+      this.logger.log(`Failed chunk ${chunkId} marked for retry or permanent failure`);
+    } catch (error) {
+      this.logger.error(
+        `Error handling failed chunk: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  /**
+   * Manejar errores no recuperables (Dead Letter Queue)
+   */
+  private async handleAIResponseDLQ(payload: Record<string, unknown>): Promise<void> {
+    try {
+      const { aiResponseId, userId, senderId, reason } = payload as any;
+
+      this.logger.error(
+        `[DLQ] AI Response failed permanently | aiResponseId: ${aiResponseId} | userId: ${userId} | reason: ${reason}`,
+      );
+
+      // Aquí puedes agregar lógica adicional como:
+      // - Notificar a admin
+      // - Enviar mensaje de error al usuario
+      // - Guardar en tabla de errores para análisis
+      // - Alertas en Slack, etc.
+
+      // Por ahora, solo loguear
+      this.logger.warn(
+        `DLQ recorded for ${aiResponseId}: user may need manual intervention`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error handling DLQ: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  /**
+   * Enviar un chunk al usuario (wrapper)
+   * Wrapper alrededor de sendToOneWithId() del WhatsappService
+   * @param recipient - Número de teléfono destino
+   * @param message - Mensaje/chunk a enviar
+   * @param messageId - ID único del mensaje (para auditoría)
+   * @returns waMessageId del mensaje enviado
+   */
+  private async sendChunkToUser(
+    recipient: string,
+    message: string,
+    messageId: string,
+  ): Promise<string> {
+    const waMessageId = await this.whatsapp.sendToOneWithId(
+      messageId,
+      recipient,
+      message,
+      null, // Sin media URL para chunks de texto de IA
+    );
+    return waMessageId;
   }
 }

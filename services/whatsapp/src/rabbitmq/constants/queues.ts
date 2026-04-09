@@ -10,6 +10,8 @@ export const ROUTING_KEYS = {
   WHATSAPP_SEND: 'channels.whatsapp.send',
   WHATSAPP_RESPONSE: 'channels.whatsapp.response',
   WHATSAPP_AI_RESPONSE: 'channels.whatsapp.ai-response',
+  WHATSAPP_AI_RESPONSE_CHUNK_FAILED: 'channels.whatsapp.ai-response-chunk-failed',
+  WHATSAPP_AI_RESPONSE_DLQ: 'channels.whatsapp.ai-response-dlq',
 
   // WhatsApp Events - Incoming events from webhooks
   WHATSAPP_MESSAGE_RECEIVED: 'channels.whatsapp.events.message',
@@ -33,8 +35,10 @@ export const QUEUES = {
   WHATSAPP_EVENTS_TEMPLATE_UPDATE: 'whatsapp.events.template_update',
   WHATSAPP_EVENTS_ALERTS: 'whatsapp.events.alerts',
 
-  // AI Response Queue
+  // AI Response Queues
   WHATSAPP_AI_RESPONSE: 'whatsapp.ai-response',
+  WHATSAPP_AI_RESPONSE_CHUNK_FAILED: 'whatsapp.ai-response-chunk-failed',
+  WHATSAPP_AI_RESPONSE_DLQ: 'whatsapp.ai-response-dlq',
 
   GATEWAY_RESPONSES: 'gateway.responses',
 } as const;

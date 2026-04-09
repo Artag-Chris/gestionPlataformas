@@ -103,12 +103,16 @@ export class WhatsappService {
   // Enviar a un destinatario individual
   // ─────────────────────────────────────────
 
-  private async sendToOne(
+  /**
+   * Enviar mensaje a un destinatario y retornar waMessageId
+   * Versión pública para uso desde AIResponseService
+   */
+  async sendToOneWithId(
     messageId: string,
     recipient: string,
     message: string,
     mediaUrl?: string | null,
-  ): Promise<void> {
+  ): Promise<string> {
     // Persistir el intento en la BD
     const record = await this.prisma.waMessage.create({
       data: {
@@ -126,7 +130,7 @@ export class WhatsappService {
       const payload = this.buildMetaPayload(recipient, message, mediaUrl);
 
       this.logger.debug(
-        `[sendToOne] Calling Meta API → URL: ${this.apiUrl} | recipient: ${recipient} | payload: ${JSON.stringify(payload)}`,
+        `[sendToOneWithId] Calling Meta API → URL: ${this.apiUrl} | recipient: ${recipient}`,
       );
 
       const response = await axios.post<MetaApiResponse>(this.apiUrl, payload, {
@@ -144,20 +148,20 @@ export class WhatsappService {
       });
 
       this.logger.log(`Sent to ${recipient} | waMessageId: ${waMessageId}`);
+      return waMessageId;
     } catch (error) {
-      const { reason, detail, errorCode } = this.extractErrorDetail(error);
+      const { reason } = this.extractErrorDetail(error);
 
       this.logger.warn(
-        `Failed to send normal message to ${recipient} | errorCode: ${errorCode} | reason: ${reason}\n` +
-          `  Attempting template fallback...`,
+        `Failed to send message to ${recipient}: ${reason}. Attempting template fallback...`,
       );
 
       try {
         // Intentar enviar con la plantilla como fallback
         await this.sendTemplate(recipient, record.id, messageId);
-        return; // Éxito con plantilla
+        return ''; // Retornamos vacío porque fue con template
       } catch (templateError) {
-        const { reason: templateReason, detail: templateDetail } = this.extractErrorDetail(templateError);
+        const { reason: templateReason } = this.extractErrorDetail(templateError);
 
         await this.prisma.waMessage.update({
           where: { id: record.id },
@@ -168,16 +172,19 @@ export class WhatsappService {
           },
         });
 
-        this.logger.error(
-          `Template fallback FAILED for ${recipient}\n` +
-            `  [Original error] ${reason}\n` +
-            `  [Template error] ${templateReason}\n` +
-            `  ${templateDetail}`,
-        );
-
+        this.logger.error(`Both sendToOne and template fallback failed for ${recipient}`);
         throw new Error(`${reason} + template fallback also failed: ${templateReason}`);
       }
     }
+  }
+
+  private async sendToOne(
+    messageId: string,
+    recipient: string,
+    message: string,
+    mediaUrl?: string | null,
+  ): Promise<void> {
+    await this.sendToOneWithId(messageId, recipient, message, mediaUrl);
   }
 
   // ─────────────────────────────────────────
