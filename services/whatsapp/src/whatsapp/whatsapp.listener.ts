@@ -303,10 +303,10 @@ export class WhatsappListener implements OnModuleInit {
         userId: user.id,
         senderId,
         messageId,
-        aiResponse: n8nResponse.response,
-        confidence: n8nResponse.confidence,
-        model: n8nResponse.model,
-        processingTime: n8nResponse.processingTime,
+        aiResponse: n8nResponse.response || 'No AI response generated',
+        confidence: n8nResponse.confidence || 0,
+        model: n8nResponse.model || 'unknown',
+        processingTime: n8nResponse.processingTime || 0,
         timestamp: Date.now(),
       });
 
@@ -394,8 +394,11 @@ export class WhatsappListener implements OnModuleInit {
       const { userId, senderId, messageId, aiResponse, confidence, model, processingTime } =
         payload as any;
 
+      // Asegurar que aiResponse no esté vacío
+      const validAiResponse = aiResponse || 'No AI response generated';
+
       this.logger.debug(
-        `[handleAIResponse] Processing AI response for user ${userId} | senderId: ${senderId}`,
+        `[handleAIResponse] Processing AI response for user ${userId} | senderId: ${senderId} | length: ${validAiResponse.length}`,
       );
 
       // 1. Crear registro de auditoría
@@ -404,14 +407,14 @@ export class WhatsappListener implements OnModuleInit {
         senderId,
         messageId,
         originalMessage: '', // No tenemos el original aquí, pero lo guardamos
-        aiResponse,
-        model,
-        confidence,
-        processingTime,
+        aiResponse: validAiResponse,
+        model: model || 'unknown',
+        confidence: confidence || 0,
+        processingTime: processingTime || 0,
       });
 
       // 2. Dividir mensaje en chunks (con numeración)
-      const chunks = this.aiResponseService.splitMessageIntoChunks(aiResponse);
+      const chunks = this.aiResponseService.splitMessageIntoChunks(validAiResponse);
 
       if (chunks.length === 0) {
         this.logger.warn(`AI response is empty for user ${userId}`);

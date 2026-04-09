@@ -34,13 +34,16 @@ export class AIResponseService {
     confidence?: number;
     processingTime?: number;
   }) {
+    // Si aiResponse está vacío o undefined, usar un mensaje por defecto
+    const aiResponseText = data.aiResponse || 'No response received from AI service';
+
     return this.prisma.aIResponse.create({
       data: {
         userId: data.userId,
         senderId: data.senderId,
         messageId: data.messageId,
         originalMessage: data.originalMessage,
-        aiResponse: data.aiResponse,
+        aiResponse: aiResponseText,
         model: data.model,
         confidence: data.confidence,
         processingTime: data.processingTime,
