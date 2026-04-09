@@ -143,9 +143,22 @@ export class WhatsappListener implements OnModuleInit {
     // Si es mensaje entrante normal (no status)
     // Extraer datos de usuario y resolver identidad
     if (value.messages && Array.isArray(value.messages)) {
+      // Crear mapa de contactos para búsqueda rápida de nombres
+      // WhatsApp envía el perfil en contacts[].profile.name, no en message.profile
+      const contactsMap = new Map<string, string>();
+      if (value.contacts && Array.isArray(value.contacts)) {
+        for (const contact of value.contacts) {
+          const contactName = contact.profile?.name;
+          if (contactName && contact.wa_id) {
+            contactsMap.set(contact.wa_id, contactName);
+          }
+        }
+      }
+
       for (const message of value.messages) {
         const senderId = message.from;
-        const senderName = message.profile?.name || senderId;
+        // Obtener nombre del contacto desde el mapa, si no existe usar el ID
+        const senderName = contactsMap.get(senderId) || senderId;
 
         this.logger.log(`📨 Incoming message from ${senderId} (${senderName})`);
 
@@ -155,7 +168,7 @@ export class WhatsappListener implements OnModuleInit {
             channel: 'whatsapp',
             channelUserId: senderId,
             phone: senderId, // WhatsApp ID es el teléfono
-            displayName: senderName,
+            displayName: senderName, // Nombre del contacto desde WhatsApp
             metadata: {
               messageId: message.id,
               timestamp: message.timestamp,
@@ -163,7 +176,7 @@ export class WhatsappListener implements OnModuleInit {
           });
 
           this.logger.debug(
-            `Identity resolution event published for user ${senderId}`,
+            `Identity resolution event published for user ${senderId} with displayName "${senderName}"`,
           );
         } catch (error) {
           this.logger.error(
