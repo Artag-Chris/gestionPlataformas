@@ -20,6 +20,24 @@ interface MetaApiError {
   };
 }
 
+interface N8NWebhookPayload {
+  userId: string;
+  userName: string;
+  userPhone: string;
+  channel: string;
+  message: string;
+  messageId: string;
+  timestamp: number;
+}
+
+interface N8NWebhookResponse {
+  status: 'success' | 'error' | 'rate_limited';
+  response: string;
+  confidence?: number;
+  model?: string;
+  processingTime?: number;
+}
+
 @Injectable()
 export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
@@ -29,6 +47,9 @@ export class WhatsappService {
   private readonly apiVersion: string;
   private readonly templateName: string;
   private readonly templateLanguage: string;
+  private readonly n8nWebhookUrl: string;
+  private readonly n8nWebhookTimeout: number;
+  private readonly n8nWebhookRetries: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -40,6 +61,9 @@ export class WhatsappService {
     this.apiUrl = `https://graph.facebook.com/${this.apiVersion}/${this.phoneNumberId}/messages`;
     this.templateName = config.get<string>('WHATSAPP_TEMPLATE_NAME') ?? 'presentacion_de_ia';
     this.templateLanguage = config.get<string>('WHATSAPP_TEMPLATE_LANGUAGE') ?? 'en';
+    this.n8nWebhookUrl = config.getOrThrow<string>('N8N_WEBHOOK_URL');
+    this.n8nWebhookTimeout = config.get<number>('N8N_WEBHOOK_TIMEOUT') ?? 5000;
+    this.n8nWebhookRetries = config.get<number>('N8N_WEBHOOK_RETRIES') ?? 1;
   }
 
   // ─────────────────────────────────────────
@@ -329,5 +353,113 @@ export class WhatsappService {
 
     const reason = error instanceof Error ? error.message : String(error);
     return { reason, detail: `(non-axios error) ${reason}` };
+  }
+
+  // ─────────────────────────────────────────
+  // N8N Webhook Integration
+  // ─────────────────────────────────────────
+
+  /**
+   * Call N8N webhook to generate AI response for a message
+   * @param userId - User ID
+   * @param userName - User's display name
+   * @param userPhone - User's phone number
+   * @param message - The incoming message text
+   * @param messageId - Unique message identifier
+   * @returns N8N webhook response or null if error/rate limited
+   */
+  async callN8NWebhook(
+    userId: string,
+    userName: string,
+    userPhone: string,
+    message: string,
+    messageId: string,
+  ): Promise<N8NWebhookResponse | null> {
+    return this.callN8NWebhookWithRetry(
+      userId,
+      userName,
+      userPhone,
+      message,
+      messageId,
+      0,
+    );
+  }
+
+  /**
+   * Call N8N webhook with automatic retries on failure
+   * @param userId - User ID
+   * @param userName - User's display name
+   * @param userPhone - User's phone number
+   * @param message - The incoming message text
+   * @param messageId - Unique message identifier
+   * @param attemptNumber - Current attempt number (for recursion)
+   * @returns N8N webhook response or null if failed after all retries
+   */
+  private async callN8NWebhookWithRetry(
+    userId: string,
+    userName: string,
+    userPhone: string,
+    message: string,
+    messageId: string,
+    attemptNumber: number,
+  ): Promise<N8NWebhookResponse | null> {
+    const maxRetries = this.n8nWebhookRetries;
+    const currentAttempt = attemptNumber + 1;
+
+    try {
+      const payload: N8NWebhookPayload = {
+        userId,
+        userName,
+        userPhone,
+        channel: 'whatsapp',
+        message,
+        messageId,
+        timestamp: Date.now(),
+      };
+
+      this.logger.debug(
+        `[callN8NWebhook] Attempt ${currentAttempt}/${maxRetries + 1} → URL: ${this.n8nWebhookUrl} | userId: ${userId} | messageId: ${messageId}`,
+      );
+
+      const response = await axios.post<N8NWebhookResponse>(
+        this.n8nWebhookUrl,
+        payload,
+        {
+          timeout: this.n8nWebhookTimeout,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      this.logger.log(
+        `[callN8NWebhook] Success → userId: ${userId} | status: ${response.data.status} | processingTime: ${response.data.processingTime}ms`,
+      );
+
+      return response.data;
+    } catch (error) {
+      const { reason } = this.extractErrorDetail(error);
+
+      if (currentAttempt <= maxRetries) {
+        this.logger.warn(
+          `[callN8NWebhook] Attempt ${currentAttempt}/${maxRetries + 1} failed: ${reason}. Retrying...`,
+        );
+        // Wait before retrying
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return this.callN8NWebhookWithRetry(
+          userId,
+          userName,
+          userPhone,
+          message,
+          messageId,
+          attemptNumber + 1,
+        );
+      } else {
+        this.logger.error(
+          `[callN8NWebhook] Failed after ${maxRetries + 1} attempts → userId: ${userId} | reason: ${reason}`,
+        );
+        return null;
+      }
+    }
   }
 }

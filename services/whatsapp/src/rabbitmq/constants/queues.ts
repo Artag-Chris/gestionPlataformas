@@ -9,6 +9,7 @@ export const RABBITMQ_EXCHANGE = 'channels';
 export const ROUTING_KEYS = {
   WHATSAPP_SEND: 'channels.whatsapp.send',
   WHATSAPP_RESPONSE: 'channels.whatsapp.response',
+  WHATSAPP_AI_RESPONSE: 'channels.whatsapp.ai-response',
 
   // WhatsApp Events - Incoming events from webhooks
   WHATSAPP_MESSAGE_RECEIVED: 'channels.whatsapp.events.message',
@@ -31,6 +32,9 @@ export const QUEUES = {
   WHATSAPP_EVENTS_PHONE_NUMBER_UPDATE: 'whatsapp.events.phone_number_update',
   WHATSAPP_EVENTS_TEMPLATE_UPDATE: 'whatsapp.events.template_update',
   WHATSAPP_EVENTS_ALERTS: 'whatsapp.events.alerts',
+
+  // AI Response Queue
+  WHATSAPP_AI_RESPONSE: 'whatsapp.ai-response',
 
   GATEWAY_RESPONSES: 'gateway.responses',
 } as const;

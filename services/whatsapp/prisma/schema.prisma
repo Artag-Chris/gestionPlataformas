@@ -178,6 +178,11 @@ model User {
   /// Source channel that provided the current real name
   nameSource     String?
   
+  /// Enable/disable AI responses for this user (default: true = opt-out model)
+  aiEnabled Boolean @default(true)
+  /// Timestamp of last AI setting change
+  aiEnabledAt DateTime?
+  
   /// Soft delete timestamp
   deletedAt DateTime?
   
@@ -190,6 +195,7 @@ model User {
   nameHistory  NameHistory[]
 
   @@index([realName])
+  @@index([aiEnabled])
   @@index([deletedAt])
   @@index([createdAt])
 }

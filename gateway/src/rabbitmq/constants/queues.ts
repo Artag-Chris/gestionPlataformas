@@ -97,15 +97,16 @@ export const ROUTING_KEYS = {
   FACEBOOK_RESPONSE: 'channels.facebook.response',
 
   // Identity Service - Queries (Request-Response pattern)
-  IDENTITY_RESOLVE: 'channels.identity.resolve',
-  IDENTITY_GET_USER: 'channels.identity.get_user',
-  IDENTITY_GET_ALL_USERS: 'channels.identity.get_all_users',
-  IDENTITY_MERGE_USERS: 'channels.identity.merge_users',
-  IDENTITY_DELETE_USER: 'channels.identity.delete_user',
-  IDENTITY_GET_REPORT: 'channels.identity.get_report',
-  IDENTITY_UPDATE_PHONE: 'channels.identity.update_phone',
-  IDENTITY_UPDATE_EMAIL: 'channels.identity.update_email',
-  IDENTITY_RESPONSE: 'identity.responses',
+   IDENTITY_RESOLVE: 'channels.identity.resolve',
+   IDENTITY_GET_USER: 'channels.identity.get_user',
+   IDENTITY_GET_ALL_USERS: 'channels.identity.get_all_users',
+   IDENTITY_MERGE_USERS: 'channels.identity.merge_users',
+   IDENTITY_DELETE_USER: 'channels.identity.delete_user',
+   IDENTITY_GET_REPORT: 'channels.identity.get_report',
+   IDENTITY_UPDATE_PHONE: 'channels.identity.update_phone',
+   IDENTITY_UPDATE_EMAIL: 'channels.identity.update_email',
+   IDENTITY_UPDATE_AI_SETTINGS: 'channels.identity.update_ai_settings',
+   IDENTITY_RESPONSE: 'identity.responses',
 } as const;
 
 export const QUEUES = {
@@ -192,15 +193,16 @@ export const QUEUES = {
     GATEWAY_RESPONSES: 'gateway.responses',
     
     // Identity Service Queues
-    IDENTITY_RESOLVE: 'identity.resolve',
-    IDENTITY_GET_USER: 'identity.get_user',
-    IDENTITY_GET_ALL_USERS: 'identity.get_all_users',
-    IDENTITY_MERGE_USERS: 'identity.merge_users',
-    IDENTITY_DELETE_USER: 'identity.delete_user',
-    IDENTITY_GET_REPORT: 'identity.get_report',
-    IDENTITY_UPDATE_PHONE: 'identity.update_phone',
-    IDENTITY_UPDATE_EMAIL: 'identity.update_email',
-    IDENTITY_RESPONSES: 'gateway.identity.responses',
+     IDENTITY_RESOLVE: 'identity.resolve',
+     IDENTITY_GET_USER: 'identity.get_user',
+     IDENTITY_GET_ALL_USERS: 'identity.get_all_users',
+     IDENTITY_MERGE_USERS: 'identity.merge_users',
+     IDENTITY_DELETE_USER: 'identity.delete_user',
+     IDENTITY_GET_REPORT: 'identity.get_report',
+     IDENTITY_UPDATE_PHONE: 'identity.update_phone',
+     IDENTITY_UPDATE_EMAIL: 'identity.update_email',
+     IDENTITY_UPDATE_AI_SETTINGS: 'identity.update_ai_settings',
+     IDENTITY_RESPONSES: 'gateway.identity.responses',
 } as const;
 
 // Tipo helper para inferir los valores del objeto

@@ -3,6 +3,7 @@ import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { WhatsappService } from './whatsapp.service';
 import { ROUTING_KEYS, QUEUES } from '../rabbitmq/constants/queues';
 import { SendWhatsappDto } from './dto/send-whatsapp.dto';
+import { PrismaService } from '../prisma/prisma.service';
 
 // Identity service routing keys
 const IDENTITY_RESOLVE_ROUTING_KEY = 'channels.identity.resolve';
@@ -14,6 +15,7 @@ export class WhatsappListener implements OnModuleInit {
   constructor(
     private readonly rabbitmq: RabbitMQService,
     private readonly whatsapp: WhatsappService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async onModuleInit() {
@@ -159,6 +161,9 @@ export class WhatsappListener implements OnModuleInit {
         const senderId = message.from;
         // Obtener nombre del contacto desde el mapa, si no existe usar el ID
         const senderName = contactsMap.get(senderId) || senderId;
+        const messageText = message.text?.body || '';
+        const messageId = message.id;
+        const timestamp = message.timestamp;
 
         this.logger.log(`📨 Incoming message from ${senderId} (${senderName})`);
 
@@ -170,13 +175,23 @@ export class WhatsappListener implements OnModuleInit {
             phone: senderId, // WhatsApp ID es el teléfono
             displayName: senderName, // Nombre del contacto desde WhatsApp
             metadata: {
-              messageId: message.id,
-              timestamp: message.timestamp,
+              messageId: messageId,
+              timestamp: timestamp,
+              messageText: messageText,
             },
           });
 
           this.logger.debug(
             `Identity resolution event published for user ${senderId} with displayName "${senderName}"`,
+          );
+
+          // Process AI response if enabled (fire-and-forget)
+          this.processAIResponse(senderId, senderName, messageText, messageId).catch(
+            (error) => {
+              this.logger.error(
+                `Failed to process AI response: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            },
           );
         } catch (error) {
           this.logger.error(
@@ -184,6 +199,92 @@ export class WhatsappListener implements OnModuleInit {
           );
         }
       }
+    }
+  }
+
+  /**
+   * Process AI response for incoming message
+   * Checks if user has AI enabled, then calls N8N webhook
+   */
+  private async processAIResponse(
+    senderId: string,
+    senderName: string,
+    messageText: string,
+    messageId: string,
+  ): Promise<void> {
+    try {
+      // Find user by their WhatsApp identity
+      const userIdentity = await this.prisma.userIdentity.findUnique({
+        where: {
+          channelUserId_channel: {
+            channelUserId: senderId,
+            channel: 'whatsapp',
+          },
+        },
+        include: {
+          user: true,
+        },
+      });
+
+      if (!userIdentity) {
+        this.logger.debug(`User identity not found for ${senderId}, skipping AI response`);
+        return;
+      }
+
+      const user = userIdentity.user;
+
+      // Check if AI is enabled for this user
+      if (!user.aiEnabled) {
+        this.logger.debug(`AI disabled for user ${user.id}, skipping N8N webhook`);
+        return;
+      }
+
+      this.logger.debug(`AI enabled for user ${user.id}, calling N8N webhook`);
+
+      // Call N8N webhook to generate AI response
+      const n8nResponse = await this.whatsapp.callN8NWebhook(
+        user.id,
+        senderName,
+        senderId,
+        messageText,
+        messageId,
+      );
+
+      if (!n8nResponse) {
+        this.logger.warn(`N8N webhook returned null for user ${user.id}`);
+        return;
+      }
+
+      // Check response status
+      if (n8nResponse.status === 'rate_limited') {
+        this.logger.warn(`N8N rate limited for user ${user.id}`);
+        return;
+      }
+
+      if (n8nResponse.status === 'error') {
+        this.logger.error(`N8N error for user ${user.id}: ${n8nResponse.response}`);
+        return;
+      }
+
+      // Publish AI response event for further processing
+      await this.rabbitmq.publish(ROUTING_KEYS.WHATSAPP_AI_RESPONSE, {
+        userId: user.id,
+        senderId,
+        messageId,
+        aiResponse: n8nResponse.response,
+        confidence: n8nResponse.confidence,
+        model: n8nResponse.model,
+        processingTime: n8nResponse.processingTime,
+        timestamp: Date.now(),
+      });
+
+      this.logger.log(
+        `AI response published for user ${user.id} | confidence: ${n8nResponse.confidence} | model: ${n8nResponse.model}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error processing AI response: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 

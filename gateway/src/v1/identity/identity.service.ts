@@ -2,7 +2,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { RabbitMQService } from '../../rabbitmq/rabbitmq.service';
 import { RequestResponseManager } from '../../identity/services/request-response.manager';
 import { ROUTING_KEYS } from '../../rabbitmq/constants/queues';
-import { ResolveIdentityDto, MergeUsersDto } from './dto';
+import { ResolveIdentityDto, MergeUsersDto, UpdateAISettingsDto } from './dto';
 
 /**
  * Gateway Identity Service
@@ -152,5 +152,30 @@ export class IdentityService {
       this.logger.error(`Error getting report: ${error.message}`);
       throw error;
     }
+  }
+
+  /**
+   * Update user AI settings - Fire-and-forget
+   */
+  async updateAISettings(
+    userId: string,
+    dto: UpdateAISettingsDto,
+  ): Promise<{ success: boolean; message: string }> {
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
+
+    this.logger.log(`Publishing update AI settings for user ${userId} - aiEnabled: ${dto.aiEnabled}`);
+
+    await this.rabbitmq.publish(ROUTING_KEYS.IDENTITY_UPDATE_AI_SETTINGS, {
+      userId,
+      aiEnabled: dto.aiEnabled,
+      timestamp: Date.now(),
+    });
+
+    return {
+      success: true,
+      message: 'AI settings update queued',
+    };
   }
 }

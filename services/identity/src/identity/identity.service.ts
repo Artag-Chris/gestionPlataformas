@@ -552,4 +552,17 @@ export class IdentityService {
       },
     };
   }
+
+  /// Update user AI settings
+  async updateAISettings(userId: string, aiEnabled: boolean): Promise<User> {
+    this.logger.log(`Updating AI settings for user ${userId}: aiEnabled=${aiEnabled}`);
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        aiEnabled,
+        aiEnabledAt: new Date(),
+      },
+    });
+  }
 }

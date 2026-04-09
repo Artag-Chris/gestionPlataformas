@@ -33,10 +33,15 @@ export class IdentityListener implements OnModuleInit {
         IDENTITY_ROUTING_KEYS.UPDATE_PHONE,
       );
 
-      await this.rabbitmqService.declareQueue(
-        IDENTITY_QUEUES.UPDATE_EMAIL,
-        IDENTITY_ROUTING_KEYS.UPDATE_EMAIL,
-      );
+       await this.rabbitmqService.declareQueue(
+         IDENTITY_QUEUES.UPDATE_EMAIL,
+         IDENTITY_ROUTING_KEYS.UPDATE_EMAIL,
+       );
+
+       await this.rabbitmqService.declareQueue(
+         IDENTITY_QUEUES.UPDATE_AI_SETTINGS,
+         IDENTITY_ROUTING_KEYS.UPDATE_AI_SETTINGS,
+       );
 
       // Declare queues for read operations (request-response)
       await this.rabbitmqService.declareQueue(
@@ -76,10 +81,15 @@ export class IdentityListener implements OnModuleInit {
         (message) => this.handlePhoneNumberUpdate(message),
       );
 
-      await this.rabbitmqService.consume(
-        IDENTITY_QUEUES.UPDATE_EMAIL,
-        (message) => this.handleEmailUpdate(message),
-      );
+       await this.rabbitmqService.consume(
+         IDENTITY_QUEUES.UPDATE_EMAIL,
+         (message) => this.handleEmailUpdate(message),
+       );
+
+       await this.rabbitmqService.consume(
+         IDENTITY_QUEUES.UPDATE_AI_SETTINGS,
+         (message) => this.handleUpdateAISettings(message),
+       );
 
       // Start consuming read operations (request-response)
       await this.rabbitmqService.consume(
@@ -204,6 +214,29 @@ export class IdentityListener implements OnModuleInit {
       const err = error as Error;
       this.logger.error(
         `Error handling email update: ${err.message}`,
+        err.stack,
+      );
+      throw error;
+    }
+  }
+
+  private async handleUpdateAISettings(message: any): Promise<void> {
+    try {
+      this.logger.debug(
+        `Processing update AI settings: ${JSON.stringify(message)}`,
+      );
+
+      const { userId, aiEnabled, timestamp } = message;
+
+      const result = await this.identityService.updateAISettings(userId, aiEnabled);
+
+      this.logger.log(
+        `AI settings updated for user ${userId}: aiEnabled=${result.aiEnabled}`,
+      );
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Error handling update AI settings: ${err.message}`,
         err.stack,
       );
       throw error;

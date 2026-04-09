@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Delete,
+  Patch,
   Param,
   Body,
   Query,
@@ -11,7 +12,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { IdentityService } from './identity.service';
-import { ResolveIdentityDto, MergeUsersDto } from './dto';
+import { ResolveIdentityDto, MergeUsersDto, UpdateAISettingsDto } from './dto';
 
 /**
  * Identity API Controller
@@ -118,5 +119,30 @@ export class IdentityController {
   @Get('report')
   async getReport(): Promise<any> {
     return this.identityService.getReport();
+  }
+
+  /**
+   * Update user AI settings (Fire-and-forget)
+   * 
+   * PATCH /api/v1/identity/users/:userId/ai-settings
+   * Body: { aiEnabled: boolean }
+   * 
+   * Example:
+   * {
+   *   "aiEnabled": false
+   * }
+   * 
+   * Returns 202 ACCEPTED (event queued for processing)
+   */
+  @Patch('users/:userId/ai-settings')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async updateAISettings(
+    @Param('userId') userId: string,
+    @Body() dto: UpdateAISettingsDto,
+  ): Promise<any> {
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
+    return this.identityService.updateAISettings(userId, dto);
   }
 }

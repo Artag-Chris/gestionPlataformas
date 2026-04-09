@@ -17,6 +17,7 @@ export const IDENTITY_ROUTING_KEYS = {
   /// Update events from channels
   UPDATE_PHONE: 'channels.identity.update_phone',
   UPDATE_EMAIL: 'channels.identity.update_email',
+  UPDATE_AI_SETTINGS: 'channels.identity.update_ai_settings',
   
   /// Response routing key (identity-service → gateway)
   RESPONSE: 'identity.responses',
@@ -31,6 +32,7 @@ export const IDENTITY_QUEUES = {
   GET_REPORT: 'identity.get_report',
   UPDATE_PHONE: 'identity.update_phone',
   UPDATE_EMAIL: 'identity.update_email',
+  UPDATE_AI_SETTINGS: 'identity.update_ai_settings',
   RESPONSES: 'gateway.identity.responses',
 } as const;
 
