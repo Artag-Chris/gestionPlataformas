@@ -1,13 +1,11 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { RabbitMQService } from './rabbitmq/rabbitmq.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Connect to RabbitMQ
-  const rabbitmqService = app.get(RabbitMQService);
-  await rabbitmqService.connect();
+  // RabbitMQ will connect automatically via OnModuleInit hook
+  // IdentityListener will set up queues and listeners after connection
 
   // Keep the service running for consuming messages
   await app.listen(3010);

@@ -162,6 +162,8 @@ export class IdentityService {
       where: { id: userId },
     });
 
+    if (!user) throw new Error(`User ${userId} not found`);
+
     if (dto.displayName && trustScore > (user.nameTrustScore || 0)) {
       this.logger.debug(
         `Updating user name from ${user.realName} to ${dto.displayName} (source: ${dto.channel})`,
@@ -180,7 +182,7 @@ export class IdentityService {
       });
 
       // Update user with new name
-      await this.prisma.user.update({
+      const updatedUser = await this.prisma.user.update({
         where: { id: userId },
         data: {
           realName: dto.displayName,
@@ -191,9 +193,10 @@ export class IdentityService {
           },
         },
       });
+      return updatedUser;
     } else if (dto.displayName && !user.nicknames.includes(dto.displayName)) {
       // Add as nickname if not already there
-      await this.prisma.user.update({
+      const updatedUser = await this.prisma.user.update({
         where: { id: userId },
         data: {
           nicknames: {
@@ -201,11 +204,10 @@ export class IdentityService {
           },
         },
       });
+      return updatedUser;
     }
 
-    return this.prisma.user.findUnique({
-      where: { id: userId },
-    });
+    return user;
   }
 
   /// Create a new user with initial identity
@@ -283,7 +285,7 @@ export class IdentityService {
           },
         });
       } catch (error) {
-        this.logger.warn(`Error creating phone contact: ${error.message}`);
+        this.logger.warn(`Error creating phone contact: ${(error as Error).message}`);
       }
     }
 
@@ -312,7 +314,7 @@ export class IdentityService {
           },
         });
       } catch (error) {
-        this.logger.warn(`Error creating email contact: ${error.message}`);
+        this.logger.warn(`Error creating email contact: ${(error as Error).message}`);
       }
     }
 
@@ -341,7 +343,7 @@ export class IdentityService {
           },
         });
       } catch (error) {
-        this.logger.warn(`Error creating username contact: ${error.message}`);
+        this.logger.warn(`Error creating username contact: ${(error as Error).message}`);
       }
     }
   }
@@ -429,13 +431,13 @@ export class IdentityService {
           },
         });
       } catch (error) {
-        this.logger.warn(`Error merging contact: ${error.message}`);
+        this.logger.warn(`Error merging contact: ${(error as Error).message}`);
       }
     }
 
     // Merge nicknames
     const mergedNicknames = Array.from(
-      new Set([...primary.nicknames, ...secondary.nicknames, secondary.realName].filter(Boolean)),
+      new Set([...primary.nicknames, ...secondary.nicknames, secondary.realName].filter((n): n is string => n !== null && n !== undefined)),
     );
 
     // Update primary user

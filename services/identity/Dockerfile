@@ -23,6 +23,9 @@ RUN pnpm build
 # Production stage
 FROM node:20-alpine
 
+# Install OpenSSL and other runtime dependencies for Prisma
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 RUN npm install -g pnpm
@@ -32,6 +35,7 @@ RUN pnpm install --prod --frozen-lockfile
 
 COPY prisma ./prisma
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules/.pnpm /app/node_modules/.pnpm
 
 EXPOSE 3010
 
