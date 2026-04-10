@@ -431,7 +431,7 @@ export class WhatsappService {
         `[callN8NWebhook] Attempt ${currentAttempt}/${maxRetries + 1} → URL: ${this.n8nWebhookUrl} | userId: ${userId} | messageId: ${messageId}`,
       );
 
-      const response = await axios.post<N8NWebhookResponse[]>(
+      const response = await axios.post<N8NWebhookResponse[] | N8NWebhookResponse>(
         this.n8nWebhookUrl,
         payload,
         {
@@ -449,25 +449,36 @@ export class WhatsappService {
         - response.data exists: ${!!response.data}
         - response.data type: ${typeof response.data}
         - response.data is array: ${Array.isArray(response.data)}
-        - response.data length: ${Array.isArray(response.data) ? response.data.length : 'N/A'}
         - response.data: ${JSON.stringify(response.data).substring(0, 500)}...`,
       );
 
-      // N8N returns an array, extract the first element
-      if (!Array.isArray(response.data) || response.data.length === 0) {
-        this.logger.error(
-          `[callN8NWebhook] Invalid response format:
-          - Is Array: ${Array.isArray(response.data)}
-          - Length: ${Array.isArray(response.data) ? response.data.length : 'N/A'}
-          - Full response.data: ${JSON.stringify(response.data)}`,
-        );
-        throw new Error('N8N webhook returned empty array or invalid response');
+      // N8N can return either an array or a single object
+      // In test mode: [{...}]
+      // In live mode: {...}
+      let aiResponseData: N8NWebhookResponse;
+
+      if (Array.isArray(response.data)) {
+        // Test mode: array format
+        if (response.data.length === 0) {
+          throw new Error('N8N webhook returned empty array');
+        }
+        aiResponseData = response.data[0];
+        this.logger.debug(`[callN8NWebhook] Extracted from array format (length: ${response.data.length})`);
+      } else if (typeof response.data === 'object' && response.data !== null) {
+        // Live mode: object format
+        aiResponseData = response.data as N8NWebhookResponse;
+        this.logger.debug(`[callN8NWebhook] Received object format (direct response)`);
+      } else {
+        throw new Error(`N8N webhook returned invalid format: ${typeof response.data}`);
       }
 
-      const aiResponseData = response.data[0];
+      // Validate required fields
+      if (!aiResponseData.aiResponse) {
+        throw new Error('N8N response missing aiResponse field');
+      }
 
       this.logger.log(
-        `[callN8NWebhook] Success → userId: ${userId} | aiResponse length: ${aiResponseData.aiResponse?.length || 0} | confidence: ${aiResponseData.confidence} | model: ${aiResponseData.model}`,
+        `[callN8NWebhook] Success → userId: ${aiResponseData.userId} | aiResponse length: ${aiResponseData.aiResponse?.length || 0} | confidence: ${aiResponseData.confidence} | model: ${aiResponseData.model}`,
       );
 
       return aiResponseData;
