@@ -371,7 +371,8 @@ export class InstagramListener implements OnModuleInit {
             where: { id: chunk.id },
             data: {
               status: 'SENT',
-              igMessageId: result.igMessageId,
+              externalMessageId: result.externalMessageId,
+              channel: result.channel,
               sentAt: new Date(),
             },
           });

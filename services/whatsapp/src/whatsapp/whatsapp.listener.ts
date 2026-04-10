@@ -439,7 +439,8 @@ export class WhatsappListener implements OnModuleInit {
             where: { id: chunk.id },
             data: {
               status: 'SENT',
-              waMessageId: result.waMessageId,
+              externalMessageId: result.externalMessageId,
+              channel: result.channel,
               sentAt: new Date(),
             },
           });

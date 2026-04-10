@@ -6,7 +6,8 @@ import { AIResponseStatus, ChunkStatus } from '@prisma/client';
 
 interface ChunkSendResult {
   success: boolean;
-  waMessageId?: string;
+  externalMessageId?: string;
+  channel?: string;
   error?: string;
 }
 
@@ -101,9 +102,9 @@ export class AIResponseService {
   }
 
   /**
-   * Intentar enviar un chunk con reintentos (máx 3)
-   * sendToOne debe ser un método que existe en WhatsappService
-   */
+    * Intentar enviar un chunk con reintentos (máx 3)
+    * sendToOne debe ser un método que existe en WhatsappService
+    */
   async sendChunkWithRetry(
     chunk: any,
     senderId: string,
@@ -111,7 +112,7 @@ export class AIResponseService {
       recipient: string,
       message: string,
       messageId: string,
-    ) => Promise<string>, // Retorna waMessageId
+    ) => Promise<string>, // Retorna externalMessageId
   ): Promise<ChunkSendResult> {
     let lastError: Error | null = null;
 
@@ -121,17 +122,18 @@ export class AIResponseService {
           `[sendChunkWithRetry] Attempt ${attempt}/${this.MAX_RETRIES} for chunk ${chunk.id}`,
         );
 
-        const waMessageId = await sendToOneFunction(
+        const externalMessageId = await sendToOneFunction(
           senderId,
           chunk.content,
           `chunk_${chunk.id}_attempt_${attempt}`,
         );
 
-        this.logger.log(`Chunk ${chunk.id} sent successfully | waMessageId: ${waMessageId}`);
+        this.logger.log(`Chunk ${chunk.id} sent successfully | externalMessageId: ${externalMessageId}`);
 
         return {
           success: true,
-          waMessageId,
+          externalMessageId,
+          channel: 'whatsapp',
         };
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));

@@ -324,7 +324,7 @@ model AIResponse {
   @@index([createdAt])
 }
 
-/// Chunks individuales de un AIResponse (cada uno es un mensaje de Instagram)
+/// Chunks individuales de un AIResponse (cada uno es un mensaje que se envía a través de cualquier canal)
 model AIResponseChunk {
   id              String            @id @default(uuid())
   
@@ -336,8 +336,13 @@ model AIResponseChunk {
   chunkNumber     Int
   /// Contenido del chunk (máximo 4096 caracteres)
   content         String
-  /// ID retornado por Instagram cuando se envía
-  igMessageId     String?
+  
+  /// ID retornado por la plataforma cuando se envía (unified across channels)
+  /// For WhatsApp: message ID from WhatsApp API
+  /// For Instagram: message_id from Instagram API
+  externalMessageId String?
+  /// Canal por el que se envió el chunk (whatsapp, instagram, slack, etc.)
+  channel         String?
   
   /// Estado del chunk
   status          ChunkStatus       @default(PENDING)

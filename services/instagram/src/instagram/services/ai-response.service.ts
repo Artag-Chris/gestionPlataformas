@@ -6,7 +6,8 @@ import { AIResponseStatus, ChunkStatus } from '@prisma/client';
 
 interface ChunkSendResult {
   success: boolean;
-  igMessageId?: string;
+  externalMessageId?: string;
+  channel?: string;
   error?: string;
 }
 
@@ -101,9 +102,9 @@ export class AIResponseService {
   }
 
   /**
-   * Intentar enviar un chunk con reintentos (máx 3)
-   * sendToOne debe ser un método que existe en InstagramService
-   */
+    * Intentar enviar un chunk con reintentos (máx 3)
+    * sendToOne debe ser un método que existe en InstagramService
+    */
   async sendChunkWithRetry(
     chunk: any,
     senderId: string,
@@ -111,7 +112,7 @@ export class AIResponseService {
       recipient: string,
       message: string,
       messageId: string,
-    ) => Promise<string>, // Retorna igMessageId
+    ) => Promise<string>, // Retorna externalMessageId
   ): Promise<ChunkSendResult> {
     let lastError: Error | null = null;
 
@@ -121,17 +122,18 @@ export class AIResponseService {
           `[sendChunkWithRetry] Attempt ${attempt}/${this.MAX_RETRIES} for chunk ${chunk.id}`,
         );
 
-        const igMessageId = await sendToOneFunction(
+        const externalMessageId = await sendToOneFunction(
           senderId,
           chunk.content,
           `chunk_${chunk.id}_attempt_${attempt}`,
         );
 
-        this.logger.log(`Chunk ${chunk.id} sent successfully | igMessageId: ${igMessageId}`);
+        this.logger.log(`Chunk ${chunk.id} sent successfully | externalMessageId: ${externalMessageId}`);
 
         return {
           success: true,
-          igMessageId,
+          externalMessageId,
+          channel: 'instagram',
         };
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
