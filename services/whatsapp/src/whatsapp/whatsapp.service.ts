@@ -31,11 +31,14 @@ interface N8NWebhookPayload {
 }
 
 interface N8NWebhookResponse {
-  status: 'success' | 'error' | 'rate_limited';
-  response: string;
+  userId: string;
+  senderId: string;
+  messageId: string;
+  aiResponse: string;
   confidence?: number;
   model?: string;
   processingTime?: number;
+  timestamp?: number;
 }
 
 @Injectable()
@@ -428,7 +431,7 @@ export class WhatsappService {
         `[callN8NWebhook] Attempt ${currentAttempt}/${maxRetries + 1} → URL: ${this.n8nWebhookUrl} | userId: ${userId} | messageId: ${messageId}`,
       );
 
-      const response = await axios.post<N8NWebhookResponse>(
+      const response = await axios.post<N8NWebhookResponse[]>(
         this.n8nWebhookUrl,
         payload,
         {
@@ -439,11 +442,18 @@ export class WhatsappService {
         },
       );
 
+      // N8N returns an array, extract the first element
+      if (!Array.isArray(response.data) || response.data.length === 0) {
+        throw new Error('N8N webhook returned empty array or invalid response');
+      }
+
+      const aiResponseData = response.data[0];
+
       this.logger.log(
-        `[callN8NWebhook] Success → userId: ${userId} | status: ${response.data.status} | processingTime: ${response.data.processingTime}ms`,
+        `[callN8NWebhook] Success → userId: ${userId} | aiResponse length: ${aiResponseData.aiResponse?.length || 0} | confidence: ${aiResponseData.confidence} | model: ${aiResponseData.model}`,
       );
 
-      return response.data;
+      return aiResponseData;
     } catch (error) {
       const { reason } = this.extractErrorDetail(error);
 

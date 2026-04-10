@@ -287,23 +287,13 @@ export class WhatsappListener implements OnModuleInit {
         return;
       }
 
-      // Check response status
-      if (n8nResponse.status === 'rate_limited') {
-        this.logger.warn(`N8N rate limited for user ${user.id}`);
-        return;
-      }
-
-      if (n8nResponse.status === 'error') {
-        this.logger.error(`N8N error for user ${user.id}: ${n8nResponse.response}`);
-        return;
-      }
-
+      // N8N returned a valid response with aiResponse text
       // Publish AI response event for further processing
       await this.rabbitmq.publish(ROUTING_KEYS.WHATSAPP_AI_RESPONSE, {
         userId: user.id,
         senderId,
         messageId,
-        aiResponse: n8nResponse.response || 'No AI response generated',
+        aiResponse: n8nResponse.aiResponse || 'No AI response generated',
         confidence: n8nResponse.confidence || 0,
         model: n8nResponse.model || 'unknown',
         processingTime: n8nResponse.processingTime || 0,
