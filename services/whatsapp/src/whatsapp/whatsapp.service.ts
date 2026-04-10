@@ -442,8 +442,25 @@ export class WhatsappService {
         },
       );
 
+      // Log detailed response info for debugging
+      this.logger.debug(
+        `[callN8NWebhook] Raw response received:
+        - response exists: ${!!response}
+        - response.data exists: ${!!response.data}
+        - response.data type: ${typeof response.data}
+        - response.data is array: ${Array.isArray(response.data)}
+        - response.data length: ${Array.isArray(response.data) ? response.data.length : 'N/A'}
+        - response.data: ${JSON.stringify(response.data).substring(0, 500)}...`,
+      );
+
       // N8N returns an array, extract the first element
       if (!Array.isArray(response.data) || response.data.length === 0) {
+        this.logger.error(
+          `[callN8NWebhook] Invalid response format:
+          - Is Array: ${Array.isArray(response.data)}
+          - Length: ${Array.isArray(response.data) ? response.data.length : 'N/A'}
+          - Full response.data: ${JSON.stringify(response.data)}`,
+        );
         throw new Error('N8N webhook returned empty array or invalid response');
       }
 
