@@ -427,26 +427,37 @@ export class InstagramService {
          }
          aiResponseData = response.data[0];
          this.logger.debug(`[callN8NWebhook] Extracted from array format (length: ${response.data.length})`);
-       } else if (typeof response.data === 'string') {
-         // String JSON format: parse it first
-         try {
-           const parsed = JSON.parse(response.data);
-           if (Array.isArray(parsed)) {
-             if (parsed.length === 0) {
-               throw new Error('N8N webhook returned empty array (after parsing)');
-             }
-             aiResponseData = parsed[0];
-             this.logger.debug(`[callN8NWebhook] Extracted from parsed array format (length: ${parsed.length})`);
-           } else if (typeof parsed === 'object' && parsed !== null) {
-             aiResponseData = parsed as N8NWebhookResponse;
-             this.logger.debug(`[callN8NWebhook] Received parsed object format`);
-           } else {
-             throw new Error(`N8N webhook returned invalid format after parsing: ${typeof parsed}`);
-           }
-         } catch (parseError) {
-           throw new Error(`Failed to parse N8N response as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-         }
-       } else if (typeof response.data === 'object' && response.data !== null) {
+        } else if (typeof response.data === 'string') {
+          // String JSON format: parse it first
+          try {
+            // Clean up the string: remove literal newlines and extra whitespace
+            // that might cause JSON parsing errors
+            const dataStr = response.data as string;
+            const cleanedString = dataStr
+              .replace(/\r\n/g, ' ')  // Replace Windows line endings
+              .replace(/\n/g, ' ')    // Replace Unix line endings
+              .replace(/\r/g, ' ')    // Replace Mac line endings
+              .replace(/\t/g, ' ')    // Replace tabs
+              .replace(/\s+/g, ' ')   // Collapse multiple spaces
+              .trim();
+            
+            const parsed = JSON.parse(cleanedString);
+            if (Array.isArray(parsed)) {
+              if (parsed.length === 0) {
+                throw new Error('N8N webhook returned empty array (after parsing)');
+              }
+              aiResponseData = parsed[0];
+              this.logger.debug(`[callN8NWebhook] Extracted from parsed array format (length: ${parsed.length})`);
+            } else if (typeof parsed === 'object' && parsed !== null) {
+              aiResponseData = parsed as N8NWebhookResponse;
+              this.logger.debug(`[callN8NWebhook] Received parsed object format`);
+            } else {
+              throw new Error(`N8N webhook returned invalid format after parsing: ${typeof parsed}`);
+            }
+          } catch (parseError) {
+            throw new Error(`Failed to parse N8N response as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+          }
+        } else if (typeof response.data === 'object' && response.data !== null) {
          // Live mode: object format
          aiResponseData = response.data as N8NWebhookResponse;
          this.logger.debug(`[callN8NWebhook] Received object format (direct response)`);

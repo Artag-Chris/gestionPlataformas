@@ -468,7 +468,18 @@ export class WhatsappService {
        } else if (typeof response.data === 'string') {
          // String JSON format: parse it first
          try {
-           const parsed = JSON.parse(response.data);
+           // Clean up the string: remove literal newlines and extra whitespace
+           // that might cause JSON parsing errors
+           const dataStr = response.data as string;
+           const cleanedString = dataStr
+             .replace(/\r\n/g, ' ')  // Replace Windows line endings
+             .replace(/\n/g, ' ')    // Replace Unix line endings
+             .replace(/\r/g, ' ')    // Replace Mac line endings
+             .replace(/\t/g, ' ')    // Replace tabs
+             .replace(/\s+/g, ' ')   // Collapse multiple spaces
+             .trim();
+           
+           const parsed = JSON.parse(cleanedString);
            if (Array.isArray(parsed)) {
              if (parsed.length === 0) {
                throw new Error('N8N webhook returned empty array (after parsing)');
