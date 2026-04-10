@@ -452,25 +452,45 @@ export class WhatsappService {
         - response.data: ${JSON.stringify(response.data).substring(0, 500)}...`,
       );
 
-      // N8N can return either an array or a single object
-      // In test mode: [{...}]
-      // In live mode: {...}
-      let aiResponseData: N8NWebhookResponse;
+       // N8N can return in different formats:
+       // 1. Array: [{...}] (test mode)
+       // 2. Object: {...} (live mode)
+       // 3. String JSON: "{...}" (axios returns response.data as string sometimes)
+       let aiResponseData: N8NWebhookResponse;
 
-      if (Array.isArray(response.data)) {
-        // Test mode: array format
-        if (response.data.length === 0) {
-          throw new Error('N8N webhook returned empty array');
-        }
-        aiResponseData = response.data[0];
-        this.logger.debug(`[callN8NWebhook] Extracted from array format (length: ${response.data.length})`);
-      } else if (typeof response.data === 'object' && response.data !== null) {
-        // Live mode: object format
-        aiResponseData = response.data as N8NWebhookResponse;
-        this.logger.debug(`[callN8NWebhook] Received object format (direct response)`);
-      } else {
-        throw new Error(`N8N webhook returned invalid format: ${typeof response.data}`);
-      }
+       if (Array.isArray(response.data)) {
+         // Test mode: array format
+         if (response.data.length === 0) {
+           throw new Error('N8N webhook returned empty array');
+         }
+         aiResponseData = response.data[0];
+         this.logger.debug(`[callN8NWebhook] Extracted from array format (length: ${response.data.length})`);
+       } else if (typeof response.data === 'string') {
+         // String JSON format: parse it first
+         try {
+           const parsed = JSON.parse(response.data);
+           if (Array.isArray(parsed)) {
+             if (parsed.length === 0) {
+               throw new Error('N8N webhook returned empty array (after parsing)');
+             }
+             aiResponseData = parsed[0];
+             this.logger.debug(`[callN8NWebhook] Extracted from parsed array format (length: ${parsed.length})`);
+           } else if (typeof parsed === 'object' && parsed !== null) {
+             aiResponseData = parsed as N8NWebhookResponse;
+             this.logger.debug(`[callN8NWebhook] Received parsed object format`);
+           } else {
+             throw new Error(`N8N webhook returned invalid format after parsing: ${typeof parsed}`);
+           }
+         } catch (parseError) {
+           throw new Error(`Failed to parse N8N response as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+         }
+       } else if (typeof response.data === 'object' && response.data !== null) {
+         // Live mode: object format
+         aiResponseData = response.data as N8NWebhookResponse;
+         this.logger.debug(`[callN8NWebhook] Received object format (direct response)`);
+       } else {
+         throw new Error(`N8N webhook returned invalid format: ${typeof response.data}`);
+       }
 
       // Validate required fields
       if (!aiResponseData.aiResponse) {
