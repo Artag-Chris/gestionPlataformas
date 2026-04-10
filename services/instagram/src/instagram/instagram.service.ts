@@ -15,11 +15,35 @@ interface MetaApiError {
   error: { message: string; code: number };
 }
 
+interface N8NWebhookPayload {
+  userId: string;
+  userName: string;
+  userPhone: string;
+  channel: string;
+  message: string;
+  messageId: string;
+  timestamp: number;
+}
+
+interface N8NWebhookResponse {
+  userId: string;
+  senderId: string;
+  messageId: string;
+  aiResponse: string;
+  confidence?: number;
+  model?: string;
+  processingTime?: number;
+  timestamp?: number;
+}
+
 @Injectable()
 export class InstagramService {
   private readonly logger = new Logger(InstagramService.name);
   private readonly apiUrl: string;
   private readonly pageToken: string;
+  private readonly n8nWebhookUrl: string;
+  private readonly n8nWebhookTimeout: number;
+  private readonly n8nWebhookRetries: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -29,6 +53,9 @@ export class InstagramService {
     // Use Instagram Graph API endpoint (not Facebook Graph API)
     this.pageToken = config.getOrThrow<string>('INSTAGRAM_PAGE_TOKEN');
     this.apiUrl = `https://graph.instagram.com/${version}/me/messages`;
+    this.n8nWebhookUrl = config.getOrThrow<string>('N8N_WEBHOOK_URL');
+    this.n8nWebhookTimeout = config.get<number>('N8N_WEBHOOK_TIMEOUT') ?? 5000;
+    this.n8nWebhookRetries = config.get<number>('N8N_WEBHOOK_RETRIES') ?? 1;
   }
 
   async sendToRecipients(dto: SendInstagramDto): Promise<InstagramResponseDto> {
@@ -260,43 +287,280 @@ export class InstagramService {
       }
     }
 
-    /**
-     * Fetch user profile from Instagram Graph API
-     * GET /v25.0/{IGSID}?fields=username,name&access_token=TOKEN
-     */
-    private async fetchUserProfileFromGraphApi(igsid: string): Promise<{
-      displayName?: string;
-      username?: string;
-    }> {
-      try {
-        const version = this.config.get<string>('INSTAGRAM_API_VERSION') ?? 'v25.0';
-        const url = `https://graph.instagram.com/${version}/${igsid}`;
+     /**
+      * Fetch user profile from Instagram Graph API
+      * GET /v25.0/{IGSID}?fields=username,name&access_token=TOKEN
+      */
+     private async fetchUserProfileFromGraphApi(igsid: string): Promise<{
+       displayName?: string;
+       username?: string;
+     }> {
+       try {
+         const version = this.config.get<string>('INSTAGRAM_API_VERSION') ?? 'v25.0';
+         const url = `https://graph.instagram.com/${version}/${igsid}`;
 
-        this.logger.debug(`Fetching Instagram profile from Graph API: ${url}`);
+         this.logger.debug(`Fetching Instagram profile from Graph API: ${url}`);
 
-        const response = await axios.get(url, {
-          params: {
-            fields: 'username,name',
-            access_token: this.pageToken,
+         const response = await axios.get(url, {
+           params: {
+             fields: 'username,name',
+             access_token: this.pageToken,
+           },
+         });
+
+         const profileData = response.data;
+         const displayName = profileData.name || profileData.username;
+
+         this.logger.debug(
+           `✅ Graph API response for ${igsid}: name="${profileData.name}" username="${profileData.username}"`
+         );
+
+         return {
+           displayName,
+           username: profileData.username,
+         };
+       } catch (error) {
+         this.logger.warn(
+           `Could not fetch profile from Graph API for IGSID ${igsid}: ${error instanceof Error ? error.message : String(error)}`
+         );
+         return {}; // Fallback, usará IGSID en listener
+       }
+     }
+
+  // ─────────────────────────────────────────
+  // N8N Webhook Integration
+  // ─────────────────────────────────────────
+
+  /**
+   * Call N8N webhook to generate AI response for a message
+   * @param userId - User ID
+   * @param userName - User's display name
+   * @param userPhone - User's phone number (IGSID for Instagram)
+   * @param message - The incoming message text
+   * @param messageId - Unique message identifier
+   * @returns N8N webhook response or null if error/rate limited
+   */
+  async callN8NWebhook(
+    userId: string,
+    userName: string,
+    userPhone: string,
+    message: string,
+    messageId: string,
+  ): Promise<N8NWebhookResponse | null> {
+    return this.callN8NWebhookWithRetry(
+      userId,
+      userName,
+      userPhone,
+      message,
+      messageId,
+      0,
+    );
+  }
+
+  /**
+   * Call N8N webhook with automatic retries on failure
+   * @param userId - User ID
+   * @param userName - User's display name
+   * @param userPhone - User's phone number (IGSID for Instagram)
+   * @param message - The incoming message text
+   * @param messageId - Unique message identifier
+   * @param attemptNumber - Current attempt number (for recursion)
+   * @returns N8N webhook response or null if failed after all retries
+   */
+  private async callN8NWebhookWithRetry(
+    userId: string,
+    userName: string,
+    userPhone: string,
+    message: string,
+    messageId: string,
+    attemptNumber: number,
+  ): Promise<N8NWebhookResponse | null> {
+    const maxRetries = this.n8nWebhookRetries;
+    const currentAttempt = attemptNumber + 1;
+
+    try {
+      const payload: N8NWebhookPayload = {
+        userId,
+        userName,
+        userPhone,
+        channel: 'instagram',
+        message,
+        messageId,
+        timestamp: Date.now(),
+      };
+
+      this.logger.debug(
+        `[callN8NWebhook] Attempt ${currentAttempt}/${maxRetries + 1} → URL: ${this.n8nWebhookUrl} | userId: ${userId} | messageId: ${messageId}`,
+      );
+
+      const response = await axios.post<N8NWebhookResponse[] | N8NWebhookResponse>(
+        this.n8nWebhookUrl,
+        payload,
+        {
+          timeout: this.n8nWebhookTimeout,
+          headers: {
+            'Content-Type': 'application/json',
           },
-        });
+        },
+      );
 
-        const profileData = response.data;
-        const displayName = profileData.name || profileData.username;
+      // Log detailed response info for debugging
+      this.logger.debug(
+        `[callN8NWebhook] Raw response received:
+        - response exists: ${!!response}
+        - response.data exists: ${!!response.data}
+        - response.data type: ${typeof response.data}
+        - response.data is array: ${Array.isArray(response.data)}
+        - response.data: ${JSON.stringify(response.data).substring(0, 500)}...`,
+      );
 
-        this.logger.debug(
-          `✅ Graph API response for ${igsid}: name="${profileData.name}" username="${profileData.username}"`
-        );
+      // N8N can return either an array or a single object
+      // In test mode: [{...}]
+      // In live mode: {...}
+      let aiResponseData: N8NWebhookResponse;
 
-        return {
-          displayName,
-          username: profileData.username,
-        };
-      } catch (error) {
+      if (Array.isArray(response.data)) {
+        // Test mode: array format
+        if (response.data.length === 0) {
+          throw new Error('N8N webhook returned empty array');
+        }
+        aiResponseData = response.data[0];
+        this.logger.debug(`[callN8NWebhook] Extracted from array format (length: ${response.data.length})`);
+      } else if (typeof response.data === 'object' && response.data !== null) {
+        // Live mode: object format
+        aiResponseData = response.data as N8NWebhookResponse;
+        this.logger.debug(`[callN8NWebhook] Received object format (direct response)`);
+      } else {
+        throw new Error(`N8N webhook returned invalid format: ${typeof response.data}`);
+      }
+
+      // Validate required fields
+      if (!aiResponseData.aiResponse) {
+        throw new Error('N8N response missing aiResponse field');
+      }
+
+      this.logger.log(
+        `[callN8NWebhook] Success → userId: ${aiResponseData.userId} | aiResponse length: ${aiResponseData.aiResponse?.length || 0} | confidence: ${aiResponseData.confidence} | model: ${aiResponseData.model}`,
+      );
+
+      return aiResponseData;
+    } catch (error) {
+      const { reason, detail, errorCode } = this.extractErrorDetail(error);
+
+      this.logger.debug(
+        `[callN8NWebhook] Error details: ${detail}`,
+      );
+
+      if (currentAttempt <= maxRetries) {
         this.logger.warn(
-          `Could not fetch profile from Graph API for IGSID ${igsid}: ${error instanceof Error ? error.message : String(error)}`
+          `[callN8NWebhook] Attempt ${currentAttempt}/${maxRetries + 1} failed (code: ${errorCode}): ${reason}. Retrying...`,
         );
-        return {}; // Fallback, usará IGSID en listener
+        // Wait before retrying
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return this.callN8NWebhookWithRetry(
+          userId,
+          userName,
+          userPhone,
+          message,
+          messageId,
+          attemptNumber + 1,
+        );
+      } else {
+        this.logger.error(
+          `[callN8NWebhook] Failed after ${maxRetries + 1} attempts → userId: ${userId} | errorCode: ${errorCode} | reason: ${reason}`,
+        );
+        this.logger.error(`[callN8NWebhook] Full error details:\n${detail}`);
+        return null;
       }
     }
+  }
+
+  /**
+   * Enhanced error extraction with details for debugging
+   */
+  private extractErrorDetail(error: unknown): { reason: string; detail: string; errorCode?: number } {
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError<any>;
+      const httpStatus = axiosError.response?.status ?? 'no-response';
+      const metaError = axiosError.response?.data?.error;
+
+      const reason = metaError?.message ?? axiosError.message;
+      const errorCode = metaError?.code;
+      const detail =
+        `httpStatus: ${httpStatus}\n` +
+        `  errorCode : ${metaError?.code ?? 'n/a'}\n` +
+        `  message  : ${metaError?.message ?? 'n/a'}\n` +
+        `  apiUrl   : ${this.n8nWebhookUrl}\n` +
+        `  rawBody  : ${JSON.stringify(axiosError.response?.data ?? null)}`;
+
+      return { reason, detail, errorCode };
+    }
+
+    const reason = error instanceof Error ? error.message : String(error);
+    return { reason, detail: `(non-axios error) ${reason}` };
+  }
+
+  /**
+   * Send a message to a single Instagram user (from AIResponseService)
+   * Returns igMessageId for tracking
+   */
+  async sendToOneWithId(
+    messageId: string,
+    recipient: string,
+    message: string,
+    mediaUrl?: string | null,
+  ): Promise<string> {
+    const record = await this.prisma.igMessage.create({
+      data: {
+        id: uuidv4(),
+        messageId,
+        recipient,
+        body: message,
+        mediaUrl: mediaUrl ?? null,
+        status: 'PENDING',
+      },
+    });
+
+    try {
+      const payload = this.buildPayload(recipient, message, mediaUrl);
+
+      this.logger.debug(
+        `[sendToOneWithId] Calling Instagram API → URL: ${this.apiUrl} | recipient: ${recipient}`,
+      );
+
+      const response = await axios.post<MetaApiResponse>(this.apiUrl, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.pageToken}`,
+        },
+      });
+
+      const igMessageId = response.data.message_id;
+
+      await this.prisma.igMessage.update({
+        where: { id: record.id },
+        data: { status: 'SENT', igMessageId, sentAt: new Date() },
+      });
+
+      this.logger.log(`Sent to ${recipient} | igMessageId: ${igMessageId}`);
+      return igMessageId;
+    } catch (error) {
+      const reason = this.extractError(error);
+
+      this.logger.warn(
+        `Failed to send message to ${recipient}: ${reason}.`,
+      );
+
+      await this.prisma.igMessage.update({
+        where: { id: record.id },
+        data: {
+          status: 'FAILED',
+          errorReason: reason,
+        },
+      });
+
+      this.logger.error(`Failed to send message to ${recipient}: ${reason}`);
+      throw new Error(reason);
+    }
+  }
 }

@@ -178,6 +178,11 @@ model User {
   /// Source channel that provided the current real name
   nameSource     String?
   
+  /// Enable/disable AI responses for this user (default: true = opt-out model)
+  aiEnabled Boolean @default(true)
+  /// Timestamp of last AI setting change
+  aiEnabledAt DateTime?
+  
   /// Soft delete timestamp
   deletedAt DateTime?
   
@@ -190,6 +195,7 @@ model User {
   nameHistory  NameHistory[]
 
   @@index([realName])
+  @@index([aiEnabled])
   @@index([deletedAt])
   @@index([createdAt])
 }
@@ -274,8 +280,95 @@ model NameHistory {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+   @@index([userId])
+   @@index([createdAt])
+}
+
+// ─── AI Response Models ────────────────────────────────────────────────────
+
+model AIResponse {
+  id              String            @id @default(uuid())
+  
+  /// Usuario que recibe la respuesta
+  userId          String
+  /// IGSID del usuario (Instagram Sender ID)
+  senderId        String
+  /// ID del mensaje que triggeró la respuesta de IA
+  messageId       String
+  /// Mensaje original del usuario
+  originalMessage String
+  /// Respuesta completa de N8N (sin dividir)
+  aiResponse      String
+  
+  /// Chunks individuales del mensaje
+  chunks          AIResponseChunk[]
+  
+  /// Metadata de N8N
+  model           String?
+  confidence      Float?
+  processingTime  Int?              // en millisegundos
+  
+  /// Estado de la respuesta
+  status          AIResponseStatus  @default(PENDING)
+  /// Cantidad de chunks enviados exitosamente
+  sentChunks      Int               @default(0)
+  /// Razón del fallo si aplica
+  failureReason   String?
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
   @@index([userId])
+  @@index([status])
+  @@index([senderId])
   @@index([createdAt])
+}
+
+/// Chunks individuales de un AIResponse (cada uno es un mensaje de Instagram)
+model AIResponseChunk {
+  id              String            @id @default(uuid())
+  
+  /// Referencia al AIResponse padre
+  aiResponseId    String
+  aiResponse      AIResponse        @relation(fields: [aiResponseId], references: [id], onDelete: Cascade)
+  
+  /// Número del chunk (1, 2, 3, etc.)
+  chunkNumber     Int
+  /// Contenido del chunk (máximo 4096 caracteres)
+  content         String
+  /// ID retornado por Instagram cuando se envía
+  igMessageId     String?
+  
+  /// Estado del chunk
+  status          ChunkStatus       @default(PENDING)
+  /// Cantidad de reintentos realizados (máx 3)
+  retryCount      Int               @default(0)
+  /// Timestamp cuando se envió exitosamente
+  sentAt          DateTime?
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([aiResponseId])
+  @@index([status])
+}
+
+/// Rate limiting para llamadas a N8N (máx 20/día por usuario)
+model N8NRateLimit {
+  id              String            @id @default(uuid())
+  
+  /// Usuario
+  userId          String            @unique
+  /// Cantidad de llamadas hoy
+  callsToday      Int               @default(0)
+  /// Timestamp cuando se resetea (mañana a las 00:00 UTC)
+  resetAt         DateTime
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@index([userId])
+  @@index([resetAt])
 }
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -329,4 +422,19 @@ enum EmailStatus {
   PENDING
   SENT
   FAILED
+}
+
+// ─── Enums para AI Response ───────────────────────────────────────────────
+
+enum AIResponseStatus {
+  PENDING       // Esperando ser procesado
+  SENT          // Todos los chunks fueron enviados
+  PARTIAL       // Algunos chunks se enviaron, otros fallaron
+  FAILED        // Fallo completo, no se envió nada
+}
+
+enum ChunkStatus {
+  PENDING       // Esperando ser enviado
+  SENT          // Enviado exitosamente a Instagram
+  FAILED        // Falló el envío
 }

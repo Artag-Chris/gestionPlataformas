@@ -3,6 +3,9 @@ export const RABBITMQ_EXCHANGE = 'channels';
 export const ROUTING_KEYS = {
   INSTAGRAM_SEND: 'channels.instagram.send',
   INSTAGRAM_RESPONSE: 'channels.instagram.response',
+  INSTAGRAM_AI_RESPONSE: 'channels.instagram.ai-response',
+  INSTAGRAM_AI_RESPONSE_CHUNK_FAILED: 'channels.instagram.ai-response-chunk-failed',
+  INSTAGRAM_AI_RESPONSE_DLQ: 'channels.instagram.ai-response-dlq',
 
   // Instagram Events - Incoming events from webhooks
   INSTAGRAM_MESSAGE_RECEIVED: 'channels.instagram.events.message',
@@ -28,6 +31,11 @@ export const QUEUES = {
   INSTAGRAM_EVENTS_REFERRAL: 'instagram.events.referral',
   INSTAGRAM_EVENTS_OPTIN: 'instagram.events.optin',
   INSTAGRAM_EVENTS_HANDOVER: 'instagram.events.handover',
+
+  // AI Response Queues
+  INSTAGRAM_AI_RESPONSE: 'instagram.ai-response',
+  INSTAGRAM_AI_RESPONSE_CHUNK_FAILED: 'instagram.ai-response-chunk-failed',
+  INSTAGRAM_AI_RESPONSE_DLQ: 'instagram.ai-response-dlq',
 
   GATEWAY_RESPONSES: 'gateway.responses',
 } as const;
