@@ -455,11 +455,15 @@ export class WhatsappService {
 
       return aiResponseData;
     } catch (error) {
-      const { reason } = this.extractErrorDetail(error);
+      const { reason, detail, errorCode } = this.extractErrorDetail(error);
+
+      this.logger.debug(
+        `[callN8NWebhook] Error details: ${detail}`,
+      );
 
       if (currentAttempt <= maxRetries) {
         this.logger.warn(
-          `[callN8NWebhook] Attempt ${currentAttempt}/${maxRetries + 1} failed: ${reason}. Retrying...`,
+          `[callN8NWebhook] Attempt ${currentAttempt}/${maxRetries + 1} failed (code: ${errorCode}): ${reason}. Retrying...`,
         );
         // Wait before retrying
         await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -473,8 +477,9 @@ export class WhatsappService {
         );
       } else {
         this.logger.error(
-          `[callN8NWebhook] Failed after ${maxRetries + 1} attempts → userId: ${userId} | reason: ${reason}`,
+          `[callN8NWebhook] Failed after ${maxRetries + 1} attempts → userId: ${userId} | errorCode: ${errorCode} | reason: ${reason}`,
         );
+        this.logger.error(`[callN8NWebhook] Full error details:\n${detail}`);
         return null;
       }
     }
